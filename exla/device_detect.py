@@ -1,6 +1,6 @@
 def detect_device():
     """Simulate device detection for testing"""
-    # For testing, you can modify this return value
+    # Try changing this return value to test different implementations:
     # return "a100"
     # return "orin_nano"
     return "cpu" 
