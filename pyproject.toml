@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "exla-sdk"
+version = "0.1.0"
+description = "Exla SDK for model optimization for edge"
+authors = ["Your Name <you@example.com>"]
+license = "Proprietary"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
