@@ -18,10 +18,10 @@ class ModelServer:
     def start(self):
         if self.process is None:
             if "Llama-3.1-8B-Instruct" in self.model:
-                command = f"../llama.cpp-2/build/bin/llama-server -m Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --port {self.port} -ngl 999"
+                command = f"../llama.cpp-2/build/bin/llama-server -m ../Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --port {self.port} -ngl 999"
             else:
                 # For optimized model
-                command = f"../llama.cpp-2/build/bin/llama-server -m Falcon3-1B-Instruct-1.58bit-GGUF/ggml-model-tq2_0.gguf --port {self.port} -ngl 999"
+                command = f"../llama.cpp-2/build/bin/llama-server -m ../Falcon3-1B-Instruct-1.58bit-GGUF/ggml-model-tq2_0.gguf --port {self.port} -ngl 999"
             
             print(f"\nStarting server with command: {command}\n")
             
