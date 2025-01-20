@@ -11,8 +11,8 @@ class ModelServer:
         self.process = None
         
     def _stream_output(self, pipe, prefix=''):
-        for line in iter(pipe.readline, b''):
-            print(f"{prefix}{line.decode()}", end='')
+        for line in iter(pipe.readline, ''):
+            print(f"{prefix}{line}", end='')
             sys.stdout.flush()
             
     def start(self):
@@ -30,7 +30,8 @@ class ModelServer:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 bufsize=1,
-                universal_newlines=True
+                universal_newlines=True,
+                text=True
             )
             
             # Create threads to stream output
