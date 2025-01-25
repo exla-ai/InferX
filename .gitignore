@@ -1,3 +1,4 @@
+examples/resnet34/data
 *.pyc
 
 # Packages

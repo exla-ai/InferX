@@ -10,37 +10,48 @@ class Resnet34_CPU(Resnet34_Base):
         # Initialize with pretrained weights but remove the classifier
         self.model = models.resnet34(pretrained=True)
         self.model.fc = None  # Will be set during training based on dataset
-        self.device = torch.device('cpu')
+        # Use GPU if available
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f"Using device: {self.device}")
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = None
+        
+        # Enable cuDNN auto-tuner
+        torch.backends.cudnn.benchmark = True
         
     def _initialize_classifier(self, num_classes):
         """Dynamically initialize the classifier based on dataset."""
         if self.model.fc is None or self.model.fc.out_features != num_classes:
             in_features = self.model.fc.in_features if self.model.fc else 512
             self.model.fc = nn.Linear(in_features, num_classes)
-            # Reset optimizer with new parameters
+            # Reset optimizer with new parameters and higher learning rate
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
     
-    def train(self, train_loader, val_loader=None, epochs=10, learning_rate=0.001):
+    def train(self, train_loader, val_loader=None, epochs=10, learning_rate=0.001, num_classes=10):
         """
-        Train the model with automatic class detection and metrics tracking.
+        Train the model with the specified number of classes and metrics tracking.
         
         Args:
             train_loader: DataLoader for training data
             val_loader: Optional DataLoader for validation data
             epochs: Number of training epochs
             learning_rate: Learning rate for optimization
+            num_classes: Number of classes in the dataset
         
         Returns:
             dict: Training history with metrics
         """
-        # Detect number of classes from the dataset
-        num_classes = len(train_loader.dataset.classes)
+        # Initialize classifier with specified number of classes
         self._initialize_classifier(num_classes)
         
         self.model.to(self.device)
         self.model.train()
+        
+        # Update optimizer with learning rate
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        
+        # Use gradient scaler for mixed precision training if GPU available
+        scaler = torch.cuda.amp.GradScaler() if self.device.type == 'cuda' else None
         
         history = {
             'train_loss': [],
@@ -59,11 +70,20 @@ class Resnet34_CPU(Resnet34_Base):
             for inputs, labels in pbar:
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
                 
-                self.optimizer.zero_grad()
-                outputs = self.model(inputs)
-                loss = self.criterion(outputs, labels)
-                loss.backward()
-                self.optimizer.step()
+                self.optimizer.zero_grad(set_to_none=True)  # Slightly faster than zero_grad()
+                
+                if scaler is not None:
+                    with torch.cuda.amp.autocast():
+                        outputs = self.model(inputs)
+                        loss = self.criterion(outputs, labels)
+                    scaler.scale(loss).backward()
+                    scaler.step(self.optimizer)
+                    scaler.update()
+                else:
+                    outputs = self.model(inputs)
+                    loss = self.criterion(outputs, labels)
+                    loss.backward()
+                    self.optimizer.step()
                 
                 running_loss += loss.item()
                 _, predicted = outputs.max(1)

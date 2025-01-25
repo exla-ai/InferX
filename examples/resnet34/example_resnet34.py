@@ -23,6 +23,9 @@ def create_cifar_loaders(num_train_samples=500, batch_size=32):
         root='./data', train=True, download=True, transform=transform
     )
     
+    # Store classes information
+    classes = train_dataset.classes
+    
     # Create a subset of 500 images
     indices = np.random.choice(len(train_dataset), num_train_samples, replace=False)
     train_subset = Subset(train_dataset, indices)
@@ -35,23 +38,23 @@ def create_cifar_loaders(num_train_samples=500, batch_size=32):
     train_subset = Subset(train_dataset, train_indices)
     val_subset = Subset(train_dataset, val_indices)
 
-    # Create data loaders
+    # Create data loaders - using 1 worker for better performance on small datasets
     train_loader = torch.utils.data.DataLoader(
-        train_subset, batch_size=batch_size, shuffle=True, num_workers=2
+        train_subset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True
     )
     val_loader = torch.utils.data.DataLoader(
-        val_subset, batch_size=batch_size, shuffle=False, num_workers=2
+        val_subset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True
     )
 
-    return train_loader, val_loader
+    return train_loader, val_loader, classes
 
 def main():
     # Initialize the model
     model = resnet34()
     print(f"Using implementation: {model.__class__.__name__}")
     
-    # Create data loaders with 500 training images
-    train_loader, val_loader = create_cifar_loaders(num_train_samples=500, batch_size=32)
+    # Create data loaders with 500 training images and larger batch size
+    train_loader, val_loader, classes = create_cifar_loaders(num_train_samples=500, batch_size=64)  # Increased batch size
     print(f"Training on {len(train_loader.dataset)} images")
     print(f"Validating on {len(val_loader.dataset)} images")
     
@@ -61,7 +64,8 @@ def main():
         train_loader=train_loader,
         val_loader=val_loader,
         epochs=10,
-        learning_rate=0.001
+        learning_rate=0.001,
+        num_classes=len(classes)  # Pass number of classes explicitly
     )
     end_time = time.time()
     
