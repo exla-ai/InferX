@@ -13,7 +13,7 @@ from exla.models.resnet34 import resnet34
 def create_cifar_loaders(num_train_samples=500, batch_size=32):
     """Create CIFAR-10 data loaders with a subset of training data."""
     transform = transforms.Compose([
-        transforms.Resize(224),  # ResNet34 expects 224x224 images
+        transforms.Resize((224, 224), antialias=True),  # More efficient resizing
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
@@ -27,7 +27,7 @@ def create_cifar_loaders(num_train_samples=500, batch_size=32):
     classes = train_dataset.classes
     
     # Create a subset of 500 images
-    indices = np.random.choice(len(train_dataset), num_train_samples, replace=False)
+    indices = torch.randperm(len(train_dataset))[:num_train_samples]  # Faster than numpy
     train_subset = Subset(train_dataset, indices)
     
     # Create validation set (20% of the subset)
@@ -38,12 +38,24 @@ def create_cifar_loaders(num_train_samples=500, batch_size=32):
     train_subset = Subset(train_dataset, train_indices)
     val_subset = Subset(train_dataset, val_indices)
 
-    # Create data loaders - using 1 worker for better performance on small datasets
+    # Create data loaders optimized for GPU
     train_loader = torch.utils.data.DataLoader(
-        train_subset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True
+        train_subset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=4,  # More workers for Orin
+        pin_memory=True,
+        prefetch_factor=2,
+        persistent_workers=True
     )
     val_loader = torch.utils.data.DataLoader(
-        val_subset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True
+        val_subset,
+        batch_size=batch_size * 2,  # Larger batch size for validation
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        prefetch_factor=2,
+        persistent_workers=True
     )
 
     return train_loader, val_loader, classes
@@ -53,8 +65,11 @@ def main():
     model = resnet34()
     print(f"Using implementation: {model.__class__.__name__}")
     
-    # Create data loaders with 500 training images and larger batch size
-    train_loader, val_loader, classes = create_cifar_loaders(num_train_samples=500, batch_size=64)  # Increased batch size
+    # Create data loaders with larger batch size for GPU
+    train_loader, val_loader, classes = create_cifar_loaders(
+        num_train_samples=500,
+        batch_size=128  # Much larger batch size for GPU
+    )
     print(f"Training on {len(train_loader.dataset)} images")
     print(f"Validating on {len(val_loader.dataset)} images")
     
