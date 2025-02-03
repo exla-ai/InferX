@@ -3,7 +3,7 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
 import os
 
-class CLIP_Orin_Nano:
+class Clip_Orin_Nano:
     def __init__(self, model_name="openai/clip-vit-base-patch32"):
         """
         Initializes a CLIP model on Orin Nano with TensorRT-like optimizations.

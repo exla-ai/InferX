@@ -1,5 +1,3 @@
-import torch
-
 def detect_device():
     """
     Automatically detects the hardware device.
