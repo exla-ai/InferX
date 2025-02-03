@@ -4,7 +4,7 @@ from .clip_orin_nano import Clip_Orin_Nano
 
 
 
-def resnet34():
+def clip():
     """
     Factory function that returns the appropriate Resnet_34 model
     based on the detected hardware.

@@ -8,6 +8,6 @@ class Clip_Base(BaseModel):
         print(f"Training on {self.__class__.__name__}")
         return self
         
-    def inference(self, input_data):
+    def inference(self, image_paths, classes=[]):
         print(f"Running inference on {self.__class__.__name__}")
         return ["test_prediction"]
