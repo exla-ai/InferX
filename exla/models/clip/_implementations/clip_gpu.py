@@ -28,7 +28,7 @@ class ClipServer:
         try:
             # Start server with PyTorch backend
             self._process = subprocess.Popen(
-                ["python", "-m", "clip_server"],
+                ["python", "-m", "clip_server", "onnx-flow.yml"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
