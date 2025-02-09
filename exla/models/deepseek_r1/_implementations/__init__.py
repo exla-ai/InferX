@@ -1,6 +1,6 @@
 from ...device_detect import detect_device
 from .deepseek_r1_cpu import Deepseek_R1_CPU
-from .deepseek_r1_cpu import Deepseek_R1_GPU
+from .deepseek_r1_gpu import Deepseek_R1_GPU
 
 
 def deepseek_r1():
