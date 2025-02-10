@@ -2,6 +2,7 @@ import subprocess
 import time
 import random
 import atexit
+import signal
 from pathlib import Path
 from clip_client import Client
 
@@ -9,33 +10,52 @@ class Clip_GPU:
     def __init__(self):
         # Generate random 5 digit port between 10000-65535
         self._port = random.randint(10000, 65535)
+        self._container_id = None
+        
+        # Register cleanup handlers
+        atexit.register(self._cleanup)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        
         self._start_server()
         self._setup_client()
-        atexit.register(self._cleanup)
-        
+
     def _start_server(self):
         """Start the CLIP server using Docker."""
         try:
             print(f"Starting CLIP server on port {self._port}...")
-            self._process = subprocess.Popen(
+            
+            # Start container and get its ID
+            result = subprocess.run(
                 [
                     "sudo", "docker", "run",
+                    "-d",  # Run in detached mode
                     "--rm",  # Automatically remove container when it exits
-                    "-p", f"{self._port}:51000",  # Map container port 51000 to host port
+                    "-p", f"{self._port}:51000",
                     "-v", f"{str(Path.home())}/.cache:/home/cas/.cache",
                     "--gpus", "all",
                     "jinaai/clip-server:master-tensorrt",
                     "tensorrt-flow.yml"
                 ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                capture_output=True,
+                text=True
             )
+            
+            # Store container ID for cleanup
+            self._container_id = result.stdout.strip()
+            
             # Give server time to start
-            time.sleep(10)  # Increased wait time
+            time.sleep(10)
             print("CLIP server started successfully")
             
         except Exception as e:
+            self._cleanup()
             raise RuntimeError(f"Failed to start CLIP server: {str(e)}")
+
+    def _signal_handler(self, signum, frame):
+        """Handle interrupt signals"""
+        self._cleanup()
+        exit(0)
 
     def _setup_client(self):
         """Initialize the CLIP client."""
@@ -74,10 +94,11 @@ class Clip_GPU:
     def _cleanup(self):
         """Cleanup Docker container on exit."""
         try:
-            if hasattr(self, '_process'):
-                subprocess.run(["sudo", "docker", "ps", "-q", "--filter", "ancestor=jinaai/clip-server:master-tensorrt"], 
-                             capture_output=True, text=True)
-                self._process.terminate()
+            if self._container_id:
+                print("\nCleaning up CLIP server...")
+                subprocess.run(["sudo", "docker", "stop", self._container_id], 
+                             capture_output=True)
+                self._container_id = None
         except:
             pass
 
