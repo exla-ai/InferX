@@ -109,10 +109,6 @@ def detect_device():
                 device_info['type'] = 'orin_nano'
                 device_info['capabilities']['tensorrt_supported'] = True
                 device_info['requirements'].extend(['tensorrt', 'cuda-python'])
-            elif "a100" in gpu_info['name']:
-                device_info['type'] = 'a100'
-                device_info['capabilities']['tensorrt_supported'] = True
-                device_info['requirements'].extend(['tensorrt', 'cuda-python'])
             else:
                 device_info['type'] = 'gpu'
                 device_info['requirements'].append('cuda-python')

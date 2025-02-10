@@ -1,21 +1,22 @@
 from exla.models.deepseek_r1 import deepseek_r1
 
-# Initialize the model - it will automatically select CPU or GPU implementation
+
 model = deepseek_r1()
 
-# Example prompts
-prompts = [
-    "Write a short poem about artificial intelligence.",
-    "Explain quantum computing in simple terms."
-]
 
-# Run inference
-responses = model.inference(prompts)
+# Non-streaming example
+response = model.chat([
+    {"role": "system", "content": "You are a helpful AI assistant."},
+    {"role": "user", "content": "What's the capital of France?"}
+], stream=False)
 
-# Print results
-print("\nGenerated Responses:")
-print("-" * 50)
-for prompt, response in zip(prompts, responses):
-    print(f"\nPrompt: {prompt}")
-    print(f"Response: {response}")
-    print("-" * 50)
+print("Non-streaming response:", response)
+
+# Streaming example
+print("\nStreaming response:", end=" ")
+for chunk in model.chat([
+    {"role": "system", "content": "You are a helpful AI assistant."},
+    {"role": "user", "content": "What's the capital of France?"}
+], stream=True):
+    print(chunk, end="", flush=True)
+print()
