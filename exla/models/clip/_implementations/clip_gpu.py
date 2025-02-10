@@ -87,9 +87,26 @@ class Clip_GPU:
 
         # Use the rank endpoint
         ranked_docs = self._client.rank(docs)
-        print(ranked_docs)
+      
+        results = []
         
-        return ranked_docs
+        for doc in ranked_docs:
+            result = {}
+            matches_list = []
+            for match in doc.matches:
+                score = match.scores["clip_score"].value
+                match_dict = {
+                    "image_path": match.uri,
+                    "score": f"{score:.4f}"
+                }
+                matches_list.append(match_dict)
+            result[doc.text] = matches_list
+            results.append(result)
+            
+        # Output is a list of dictionaries, each dictionary 
+        #contains a text query and a list of image paths 
+        # and scores and they are sorted by score
+        return results
 
     def _cleanup(self):
         """Cleanup Docker container on exit."""
