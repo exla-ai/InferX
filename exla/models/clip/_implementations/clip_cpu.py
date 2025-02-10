@@ -7,9 +7,6 @@ class Clip_CPU(Clip_Base):
         """
         pass
 
-    def train(self):
-        pass
-
     def inference(self, image_paths, classes=[]):
         pass
        
