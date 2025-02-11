@@ -78,6 +78,8 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
     def _run_server(self):
         """Run vLLM server in a thread."""
         cmd = [
+            "uv",
+            "run",
             "vllm",
             "serve",
             self.model_name,
@@ -93,55 +95,20 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         """Cleanup on deletion."""
         self._cleanup_port()
 
-    def chat(self, 
-        messages: List[Dict[str, str]], 
-        stream: bool = False,
-        max_tokens: int = 2048,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None
-    ) -> Union[str, Generator[str, None, None], Dict[str, int]]:
-        """
-        Chat interface that supports both streaming and non-streaming responses.
-        """
+    def chat(self):
+        """Start OpenWebUI chat interface."""
         try:
-            start_time = time.time()
+            # Start OpenWebUI with our vLLM server
+            subprocess.run([
+                "sudo", "docker", "run", "-d",
+                "-p", "3000:8080",  # OpenWebUI port
+                "-e", f"OPENAI_API_BASE=http://localhost:{self.port}/v1",
+                "-v", "open-webui:/app/backend/data",
+                "--name", "open-webui",
+                "--restart", "always",
+                "ghcr.io/open-webui/open-webui:main"
+            ])
+            print(f"\nChat interface available at: http://localhost:3000")
             
-            response = self._client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                stream=stream,
-                max_tokens=max_tokens,
-                temperature=temperature if temperature is not None else 0.7,
-                top_p=top_p if top_p is not None else 0.95
-            )
-
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-
-            if stream:
-                def stream_generator():
-                    for chunk in response:
-                        if chunk.choices[0].delta.content is not None:
-                            yield chunk.choices[0].delta.content
-                return stream_generator()
-            else:
-                # Extract token usage
-                token_usage = response.usage
-                total_tokens = token_usage.total_tokens  # includes prompt + response
-                prompt_tokens = token_usage.prompt_tokens
-                completion_tokens = token_usage.completion_tokens
-
-                # Calculate TPS
-                tps = completion_tokens / elapsed_time if elapsed_time > 0 else 0
-                
-                return {
-                    "response": response.choices[0].message.content,
-                    "total_tokens": total_tokens,
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "elapsed_time": elapsed_time,
-                    "tokens_per_second": tps
-                }
-
         except Exception as e:
-            raise RuntimeError(f"Chat failed: {str(e)}")
+            print(f"Failed to start chat interface: {e}")
