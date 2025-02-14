@@ -7,6 +7,7 @@ import requests
 import socket
 import psutil
 from openai import OpenAI
+from pathlib import Path
 
 class Deepseek_R1_GPU(Deepseek_R1_Base):
     def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B", port=8000):
@@ -25,7 +26,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         self._server_thread.start()
         
         # Wait for server to be ready
-        self._wait_for_server()
+        # self._wait_for_server()
         
         self._client = OpenAI(
             api_key="EMPTY",
@@ -76,23 +77,62 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         raise RuntimeError(f"Server did not start within {timeout} seconds")
 
     def _run_server(self):
-        """Run vLLM server in a thread."""
-        cmd = [
-            "uv",
-            "run",
-            "vllm",
-            "serve",
-            self.model_name,
-            "--enable-reasoning",
-            "--reasoning-parser",
-            "deepseek_r1",
-            "--port",
-            str(self.port)
-        ]
-        subprocess.run(cmd)
+        """Run vLLM server in a Docker container."""
+        try:
+            print("Starting vLLM server in Docker...")
+            cmd = [
+                "sudo", "docker", "run",
+                "--gpus", "all",  # Simplified GPU access
+                "-v", f"{str(Path.home())}/.cache/huggingface:/root/.cache/huggingface",
+                "-p", f"{self.port}:8000",
+                "--ipc=host",
+                "--rm",  # Remove container when stopped
+                "-d",    # Run in detached mode
+                "vllm/vllm-openai:latest",
+                "--model", self.model_name
+            ]
+            
+            # First check if nvidia-container-toolkit is installed
+            check = subprocess.run(["nvidia-smi"], capture_output=True)
+            if check.returncode != 0:
+                raise RuntimeError("NVIDIA drivers not found. Please install NVIDIA drivers.")
+            
+            # Check if Docker has GPU access
+            check = subprocess.run(["sudo", "docker", "run", "--rm", "--gpus", "all", "nvidia/cuda:11.8.0-base-ubuntu22.04", "nvidia-smi"], capture_output=True)
+            if check.returncode != 0:
+                print("GPU access not configured in Docker. Installing NVIDIA Container Toolkit...")
+                subprocess.run([
+                    "sudo", "apt-get", "update"
+                ], check=True)
+                subprocess.run([
+                    "sudo", "apt-get", "install", "-y", "nvidia-container-toolkit"
+                ], check=True)
+                subprocess.run([
+                    "sudo", "nvidia-ctk", "runtime", "configure", "--runtime=docker"
+                ], check=True)
+                subprocess.run([
+                    "sudo", "systemctl", "restart", "docker"
+                ], check=True)
+            
+            # Now try to run vLLM
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(f"Failed to start vLLM container: {result.stderr}")
+            
+            # Store container ID for cleanup
+            self._container_id = result.stdout.strip()
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to start vLLM server: {str(e)}")
 
     def __del__(self):
         """Cleanup on deletion."""
+        try:
+            if hasattr(self, '_container_id') and self._container_id:
+                subprocess.run(["sudo", "docker", "stop", self._container_id], 
+                             capture_output=True)
+        except:
+            pass
         self._cleanup_port()
 
     def chat(self):

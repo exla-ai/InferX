@@ -6,17 +6,20 @@ authors = [
     {name = "Viraat Das", email = "virat@exla.ai"}
 ]
 dependencies = [
-    "torch>=2.0.0",
-    "transformers",
-    "Pillow",
-    "tqdm",
-    "numpy",
-    "grpcio",
     "clip-client",
     "clip-server",
-    "docarray",
-    "jina",
-    "jcloud"
+    "openai",
+    "pillow",
+    "psutil",
+    "vllm",
+    "torch",
+    "transformers",
+    "accelerate",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "requests",
+    "typing-extensions"
 ]
 
 [build-system]
