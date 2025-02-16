@@ -63,6 +63,14 @@ class DockerManager:
     def __init__(self):
         self.client = docker.from_env()
         self.containers = {}  # Keep track of started containers
+        self.network = self._get_or_create_network("deepseek_network")
+
+    def _get_or_create_network(self, name):
+        existing = self.client.networks.list(names=[name])
+        if existing:
+            return existing[0]
+        else:
+            return self.client.networks.create(name, driver="bridge")
 
     def pull_image(self, image_name):
         try:
@@ -81,6 +89,10 @@ class DockerManager:
             raise RuntimeError(f"Failed to remove container: {e}")
 
     def run_container(self, name, image, command=None, ports=None, environment=None, volumes=None, detach=True, **kwargs):
+        # Ensure both containers join the same custom network
+        if "network" not in kwargs:
+            kwargs["network"] = self.network.name
+
         self.remove_container(name)
         try:
             container = self.client.containers.run(
@@ -154,13 +166,11 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
                 "--served-model-name", "deepseek-r1",
                 "--disable-log-requests",
                 "--enable-reasoning",               
-                "--reasoning-parser", "deepseek_r1", 
-                "--enable-log-stats"               
+                "--reasoning-parser", "deepseek_r1"            
             ]
 
             # Environment variables for the server.
-            env = {
-            }
+            env = {}
 
             volumes = {
                 f"{str(Path.home())}/.cache/huggingface": {
@@ -177,7 +187,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
 
             # Start the server container with GPU support, environment variables, and our updated command.
             self.docker_manager.run_container(
-                name="exla-server",
+                name="exla-language-server",
                 image=image,
                 command=cmd,
                 ports=ports,
@@ -195,7 +205,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
             self.docker_manager.pull_image(image)
 
             env = {
-                "OPENAI_API_BASE": f"http://localhost:{self.server_port}/v1",
+                "OPENAI_API_BASE": f"http://exla-language-server:{self.server_port}/v1",
                 "OPENAI_API_KEY": "EMPTY",
                 "WEBUI_AUTH": "false",
                 "MODEL": "deepseek-r1",
@@ -209,7 +219,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
                 "MODEL_LIST": "deepseek-r1",
                 "FORCE_MODEL_LIST": "true",
                 "DEBUG": "true",
-                "ENDPOINTS": '[{"name":"DeepSeek","url":"http://localhost:{self.server_port}/v1","api_key":"EMPTY"}]',
+                "ENDPOINTS": f'[{{"name":"DeepSeek","url":"http://exla-language-server:{self.server_port}/v1","api_key":"EMPTY"}}]',
                 "ENDPOINTS_TYPE": "openai",
                 "DISABLE_AUTH": "true"
             }
@@ -230,7 +240,6 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
                 ports=ports,
                 volumes=volumes,
                 detach=True,
-                network="ai-network",
                 restart_policy={"Name": "always"}
             )   
 
