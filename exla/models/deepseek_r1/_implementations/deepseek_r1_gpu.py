@@ -1,162 +1,245 @@
-from ._base import Deepseek_R1_Base
-from typing import List, Dict, Generator, Optional, Union
-import subprocess
-import threading
 import time
+import signal
+import sys
+import logging
+import atexit
 import requests
-import socket
-import psutil
-from openai import OpenAI
 from pathlib import Path
+import docker
+from docker.errors import NotFound, APIError
+import threading
+import itertools
+from ._base import Deepseek_R1_Base
+
+# Set up basic logging
+logging.basicConfig(level=logging.WARNING)  # Only show warnings and above
+logger = logging.getLogger(__name__)
+
+class ProgressIndicator:
+    """
+    A simple spinner progress indicator.
+    
+    Usage:
+      with ProgressIndicator("Loading service"):
+          # do some work
+    """
+    def __init__(self, message: str, interval: float = 0.1):
+        self.message = message
+        self.interval = interval
+        self._spinner_thread = None
+        self._stop_event = threading.Event()
+        self._spinner_cycle = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+
+    def _animate(self):
+        while not self._stop_event.is_set():
+            spinner_char = next(self._spinner_cycle)
+            sys.stdout.write(f"\r{spinner_char} {self.message}")
+            sys.stdout.flush()
+            time.sleep(self.interval)
+        sys.stdout.write("\r✓ " + self.message + "\n")
+        sys.stdout.flush()
+
+    def start(self):
+        self._stop_event.clear()
+        self._spinner_thread = threading.Thread(target=self._animate)
+        self._spinner_thread.daemon = True
+        self._spinner_thread.start()
+
+    def stop(self):
+        self._stop_event.set()
+        if self._spinner_thread:
+            self._spinner_thread.join()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.stop()
+
+
+class DockerManager:
+    """A simple Docker container manager using the Docker SDK."""
+    def __init__(self):
+        self.client = docker.from_env()
+        self.containers = {}  # Keep track of started containers
+
+    def pull_image(self, image_name):
+        try:
+            self.client.images.pull(image_name)
+        except APIError as e:
+            raise RuntimeError(f"Failed to pull Docker image: {e}")
+
+    def remove_container(self, name):
+        try:
+            container = self.client.containers.get(name)
+            container.remove(force=True)
+            self.containers.pop(name, None)
+        except NotFound:
+            pass
+        except APIError as e:
+            raise RuntimeError(f"Failed to remove container: {e}")
+
+    def run_container(self, name, image, command=None, ports=None, environment=None, volumes=None, detach=True, **kwargs):
+        self.remove_container(name)
+        try:
+            container = self.client.containers.run(
+                image=image,
+                command=command,
+                name=name,
+                ports=ports,
+                environment=environment,
+                volumes=volumes,
+                detach=detach,
+                **kwargs
+            )
+            self.containers[name] = container
+            return container
+        except APIError as e:
+            raise RuntimeError(f"Failed to start container: {e}")
+
+    def stop_all(self):
+        for name, container in list(self.containers.items()):
+            try:
+                container.stop(timeout=10)
+                container.remove()
+            except APIError:
+                pass
+            finally:
+                self.containers.pop(name, None)
+
 
 class Deepseek_R1_GPU(Deepseek_R1_Base):
-    def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B", port=8000):
-        print("Initializing Deepseek R1 model for GPU...")
+    """
+    Manages the lifecycle of the Deepseek language server and the Open WebUI chat container.
+    """
+    def __init__(self,
+                 model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+                 server_port=8000,
+                 webui_port=3000):
         self.model_name = model_name
-        self.port = port
+        self.server_port = server_port
+        self.webui_port = webui_port
+        self.docker_manager = DockerManager()
+        self.running = True
 
-        # Clean up any existing process using the port
-        self._cleanup_port()
+        # Register signal and exit handlers for graceful cleanup
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        atexit.register(self.cleanup)
 
-        # Start vLLM server in a separate thread
-        self._server_thread = threading.Thread(
-            target=self._run_server,
-            daemon=True
-        )
-        self._server_thread.start()
+    def _signal_handler(self, signum, frame):
+        print("\nShutting down gracefully...")
+        self.running = False
+        self.cleanup()
+        sys.exit(0)
 
-        # Wait for the vLLM server to be ready
-        self._wait_for_server()
+    def cleanup(self):
+        """Ensure all Docker containers are stopped and removed."""
+        self.docker_manager.stop_all()
 
-        self._client = OpenAI(
-            api_key="Empty",  # Use a non-empty value (e.g., "token-abc123") if required
-            base_url=f"http://localhost:{self.port}/v1"
-        )
+    def start_server(self):
+        """Start the Deepseek language server container."""
+        with ProgressIndicator("Initializing language server"):
+            image = "vllm/vllm-openai:latest"
+            self.docker_manager.pull_image(image)
 
-    def _verify_port_free(self):
-        """Check if port is free."""
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(('', self.port))
-                s.close()
-                return True
-            except OSError:
-                return False
-
-    def _cleanup_port(self):
-        """Clean up any process using the port."""
-        if not self._verify_port_free():
-            print(f"Port {self.port} is in use, cleaning up...")
-            for proc in psutil.process_iter(['pid', 'name']):
-                try:
-                    for conn in proc.connections('inet'):
-                        if conn.laddr.port == self.port:
-                            proc.terminate()
-                            proc.wait(timeout=5)
-                            break
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
-                    continue
-
-            # Double check port is free
-            if not self._verify_port_free():
-                raise RuntimeError(f"Failed to free port {self.port}")
-
-    def _wait_for_server(self, timeout=120):
-        """Wait for Exla server to be ready."""
-        print("Waiting for Exla server to start...")
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                response = requests.get(f"http://localhost:{self.port}/v1/models")
-                if response.status_code == 200:
-                    print("Exla server is ready!")
-                    return
-            except requests.exceptions.ConnectionError:
-                time.sleep(1)
-        raise RuntimeError(f"Server did not start within {timeout} seconds")
-
-    def _run_server(self):
-        """Run Exla server in a Docker container."""
-        try:
-            print("Starting Exla server in Docker...")
+            # Build the command-line arguments for vLLM serve.
             cmd = [
-                "sudo", "docker", "run",
-                "--gpus", "all",  # Use GPU
-                "-v", f"{str(Path.home())}/.cache/huggingface:/root/.cache/huggingface",
-                "-p", f"{self.port}:8000",
-                "--ipc=host",
-                "--rm",  # Remove container when stopped
-                "vllm/vllm-openai:latest",
                 "--model", self.model_name,
-                "--enable-reasoning",
-                "--reasoning-parser", "deepseek_r1",
-                "--uvicorn-log-level", "debug",
-                "--return-tokens-as-token-ids"
+                "--host", "0.0.0.0",
+                "--port", f"{self.server_port}",
+                "--trust-remote-code",
+                "--dtype", "half",
+                "--served-model-name", "deepseek-r1",
+                "--disable-log-requests",
+                "--enable-reasoning",               
+                "--reasoning-parser", "deepseek_r1", 
+                "--enable-log-stats"               
             ]
 
-            # First check if nvidia-container-toolkit is installed
-            check = subprocess.run(["nvidia-smi"], capture_output=True)
-            if check.returncode != 0:
-                raise RuntimeError("NVIDIA drivers not found. Please install NVIDIA drivers.")
+            # Environment variables for the server.
+            env = {
+            }
 
-            # Check if Docker has GPU access
-            check = subprocess.run(
-                ["sudo", "docker", "run", "--rm", "--gpus", "all",
-                 "nvidia/cuda:11.8.0-base-ubuntu22.04", "nvidia-smi"],
-                capture_output=True
+            volumes = {
+                f"{str(Path.home())}/.cache/huggingface": {
+                    "bind": "/root/.cache/huggingface",
+                    "mode": "rw"
+                }
+            }
+
+            ports = {"8000/tcp": self.server_port}
+
+            # Define device_requests for GPU support.
+            from docker.types import DeviceRequest
+            device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
+
+            # Start the server container with GPU support, environment variables, and our updated command.
+            self.docker_manager.run_container(
+                name="exla-server",
+                image=image,
+                command=cmd,
+                ports=ports,
+                volumes=volumes,
+                detach=True,
+                device_requests=device_requests,
+                shm_size="8g",
+                environment=env
             )
-            if check.returncode != 0:
-                print("GPU access not configured in Docker. Installing NVIDIA Container Toolkit...")
-                subprocess.run(["sudo", "apt-get", "update"], check=True)
-                subprocess.run(["sudo", "apt-get", "install", "-y", "nvidia-container-toolkit"], check=True)
-                subprocess.run(["sudo", "nvidia-ctk", "runtime", "configure", "--runtime=docker"], check=True)
-                subprocess.run(["sudo", "systemctl", "restart", "docker"], check=True)
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                raise RuntimeError(f"Failed to start Exla container: {result.stderr}")
+    def start_webui(self):
+        """Start the Open WebUI container."""
+        with ProgressIndicator("Initializing chat interface"):
+            image = "ghcr.io/open-webui/open-webui:latest"
+            self.docker_manager.pull_image(image)
 
-            # Store container ID for cleanup
-            self._container_id = result.stdout.strip()
-            print(f"Model server started with container ID: {self._container_id}")
+            env = {
+                "OPENAI_API_BASE": f"http://localhost:{self.server_port}/v1",
+                "OPENAI_API_KEY": "EMPTY",
+                "WEBUI_AUTH": "false",
+                "MODEL": "deepseek-r1",
+                "OPENAI_MODEL": "deepseek-r1",
+                "DEFAULT_MODEL": "deepseek-r1",
+                "MODELS": "deepseek-r1",
+                "COMPLETION_MODEL": "deepseek-r1",
+                "CHAT_MODEL": "deepseek-r1",
+                "INIT_COMMANDS": "update-models",
+                "AVAILABLE_MODELS": "deepseek-r1",
+                "MODEL_LIST": "deepseek-r1",
+                "FORCE_MODEL_LIST": "true",
+                "DEBUG": "true",
+                "ENDPOINTS": '[{"name":"DeepSeek","url":"http://localhost:{self.server_port}/v1","api_key":"EMPTY"}]',
+                "ENDPOINTS_TYPE": "openai",
+                "DISABLE_AUTH": "true"
+            }
 
-        except Exception as e:
-            raise RuntimeError(f"Failed to start Exla server: {str(e)}")
-            
-    def __del__(self):
-        """Cleanup on deletion."""
-        try:
-            if hasattr(self, '_container_id') and self._container_id:
-                subprocess.run(["sudo", "docker", "stop", self._container_id], capture_output=True)
-        except Exception:
-            pass
-        self._cleanup_port()
+            volumes = {
+                "open-webui": {
+                    "bind": "/app/backend/data",
+                    "mode": "rw"
+                }
+            }
 
-    def chat(self):
-        """Start Open WebUI chat interface using Exla as backend."""
-        try:
-            # Launch the Open WebUI container with additional environment variables.
-            # Adjust the following environment variables as needed:
-            # - ENABLE_RAG_WEB_SEARCH and RAG_WEB_SEARCH_ENGINE for RAG features.
-            # - ENABLE_OLLAMA_API=false to bypass Ollama-specific functionality.
-            # - OPENAI_API_KEY set to a non-empty value (e.g., "token-abc123").
-            cmd = [
-                "sudo", "docker", "run", "-d",
-                "-p", "3000:8080",  # Map container's port 8080 to host port 3000.
-                "--add-host", "host.docker.internal:host-gateway",
-                "-e", f"OPENAI_API_BASE_URL=http://host.docker.internal:{self.port}/v1",
-                "-e", "OPENAI_API_KEY=EMPTY",
-                "-e", "ENABLE_OLLAMA_API=false",
-                "-e", "ENABLE_RAG_WEB_SEARCH=true",
-                "-e", "RAG_WEB_SEARCH_ENGINE=duckduckgo",
-                "-v", "open-webui:/app/backend/data",
-                "--name", "open-webui",
-                "--restart", "always",
-                "ghcr.io/open-webui/open-webui:main"
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                raise RuntimeError(f"Failed to start Open WebUI container: {result.stderr}")
-            print("\nChat interface available at: http://localhost:3000")
-        except Exception as e:
-            print(f"Failed to start chat interface: {e}")
+            ports = {"8080/tcp": self.webui_port}
+
+            self.docker_manager.run_container(
+                name="open-webui",
+                image=image,
+                environment=env,
+                ports=ports,
+                volumes=volumes,
+                detach=True,
+                network="ai-network",
+                restart_policy={"Name": "always"}
+            )   
+
+    def run(self):
+        """Start both services and keep the process alive."""
+        self.start_server()
+        self.start_webui()
+        print(f"\n✨ Chat interface ready at: http://localhost:{self.webui_port}")
+        print("\nPress Ctrl+C to stop...")
+        
+        while self.running:
+            time.sleep(1)

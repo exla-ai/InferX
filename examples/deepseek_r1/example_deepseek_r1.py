@@ -4,5 +4,5 @@ import time
 
 model = deepseek_r1()
 
-model.chat()
+model.run()
 
