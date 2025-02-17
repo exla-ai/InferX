@@ -1,9 +1,18 @@
 from exla.optimize import optimize_model
 import torch
+import gc
 
-# Load and optimize the model
+# Clear GPU memory
+torch.cuda.empty_cache()
+gc.collect()
+
+# Load and optimize the model with FP16 precision
 model_path = "efficientnet_b0_full.pt"
-optimized_model = optimize_model(model_path)
+optimized_model = optimize_model(
+    model_path, 
+    precision="fp16",  # Use FP16 instead of INT8
+    workspace_size=1 << 28  # 256MB workspace
+)
 
 # Run inference with batch size 1
 input_tensor = torch.randn(1, 3, 224, 224).cuda()

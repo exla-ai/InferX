@@ -19,7 +19,7 @@ def _suppress_c_logs():
         return None
 
 # Suppress C-level logs before any imports
-original_stderr = _suppress_c_logs()
+# original_stderr = _suppress_c_logs()
 
 # Now import remaining modules
 import torch_tensorrt
@@ -179,6 +179,40 @@ def get_model_weights_size(model):
     except Exception:
         return 0
 
+# Utility function: Get model format and typical compression ratios
+def get_model_format_info(model):
+    try:
+        if isinstance(model, torch.jit.ScriptModule):
+            return "TorchScript"
+        elif hasattr(model, '_trt'):
+            # TensorRT engine
+            return "TensorRT"
+        elif isinstance(model, torch.nn.Module):
+            # Check if quantized
+            is_quantized = any(hasattr(m, 'qconfig') for m in model.modules())
+            if is_quantized:
+                return "PyTorch-Quantized"
+            else:
+                return "PyTorch-FP32"
+        else:
+            return "Unknown"
+    except Exception:
+        return "Unknown"
+
+# Utility function: Get typical compression ratio for format conversion
+def get_format_compression_ratio(src_format, dst_format):
+    # Compression ratios based on empirical observations
+    compression_map = {
+        ("PyTorch-FP32", "TensorRT-INT8"): 0.25,  # 4x compression
+        ("PyTorch-FP32", "TensorRT-FP16"): 0.5,   # 2x compression
+        ("PyTorch-FP32", "TensorRT-FP32"): 0.9,   # Small compression from optimization
+        ("TorchScript", "TensorRT-INT8"): 0.3,     # ~3.3x compression
+        ("TorchScript", "TensorRT-FP16"): 0.6,     # ~1.7x compression
+        ("TorchScript", "TensorRT-FP32"): 0.95,    # Small compression
+    }
+    key = (src_format, dst_format)
+    return compression_map.get(key, 1.0)
+
 # GPU Optimization class.
 class OptimizeGPU(OptimizeBase):
     def optimize(self, model_path: str, output_path: str = None, **kwargs):
@@ -200,27 +234,27 @@ class OptimizeGPU(OptimizeBase):
         model = torch.load(model_path, map_location="cuda", weights_only=False)
         model.eval()
         orig_size = get_model_size(model_path)
-        print(f"✓ Model loaded (Size: {orig_size:.2f} MB)")
+        orig_format = get_model_format_info(model)
+        print(f"✓ Model loaded (Size: {orig_size:.2f} MB, Format: {orig_format})")
 
         precision = kwargs.get("precision", "fp32")
         ws = kwargs.get("workspace_size", 1 << 20)
         dynamic_shape = kwargs.get("dynamic_shape", False)
         input_shape = kwargs.get("input_shape", (3, 224, 224))
 
-        print("Generating example input...")
+        print(f"\n📊 Optimization Settings:")
+        print(f"Precision: {precision}")
+        print(f"Workspace Size: {ws / (1024*1024):.1f} MB")
+        print(f"Dynamic Shape: {dynamic_shape}")
+        print(f"Input Shape: {input_shape}")
+
+        print("\nGenerating example input...")
         ex_input = torch.randn(1, *input_shape, device="cuda")
         print("✓ Example input generated")
 
         print("\n📊 Benchmarking original model...")
         orig_stats = benchmark_inference(model, ex_input)
         print(f"✓ Original model latency: {orig_stats['avg_ms']:.2f}ms (avg), {orig_stats['p99_ms']:.2f}ms (p99)")
-
-        if precision.lower() == "int8":
-            print("\n🔄 Preparing INT8 calibration data...")
-            cal_data = generate_distilled_data(model, num_samples=100, input_shape=input_shape,
-                                               num_iters=500, lr=0.1, device="cuda")
-            cal_data = cal_data[:10]
-            print("✓ Calibration data generated")
 
         prec_map = {"fp32": torch.float, "fp16": torch.half, "int8": torch.int8}
         if precision.lower() not in prec_map:
@@ -243,48 +277,47 @@ class OptimizeGPU(OptimizeBase):
                 "workspace_size": ws,
                 "device": device_str
             }
-            if precision.lower() == "int8":
-                compile_settings["calibrator"] = torch_tensorrt.ptq.DataLoaderCalibrator(
-                    [cal_data],
-                    cache_file="./calibration.cache",
-                    use_cache=False,
-                    algo_type="entropy"
-                )
-            trt_model = torch_tensorrt.compile(model, **compile_settings)
-            print("✓ Exla Optimizer compilation completed")
 
-            print("Saving optimized model...")
+            print(f"Starting model compilation with settings:")
+            for k, v in compile_settings.items():
+                if k != "enabled_precisions":  # Skip printing precision settings
+                    print(f"- {k}: {v}")
+            
+            print("\nStep 1: Converting model...")
+            trt_model = torch_tensorrt.compile(model, **compile_settings)
+            print("✓ Model conversion complete")
+
+            print("\nSaving optimized model...")
             try:
                 traced = torch.jit.trace(trt_model, ex_input)
                 torch.jit.save(traced, output_path)
+                print(f"✓ Model saved successfully")
             except Exception as e:
                 print(f"Note: Could not save optimized model directly ({e}); saving state dict.")
                 torch.save({"model_state_dict": model.state_dict()}, output_path)
-            opt_size = get_model_size(output_path)
-            print(f"✓ Optimized model saved (Size: {opt_size:.2f} MB)")
-
+            
             print("\n📊 Benchmarking optimized model...")
             opt_stats = benchmark_inference(trt_model, ex_input)
-            acc = None
-            try:
-                print("Generating synthetic dataset for accuracy evaluation...")
-                acc = evaluate_accuracy(model, trt_model, num_samples=32, input_shape=input_shape, device="cuda")
-            except Exception as e:
-                print(f"Note: Accuracy evaluation skipped ({e})")
             mem_orig = get_model_memory_footprint(model, input_shape=(1, *input_shape))
             mem_opt = get_model_memory_footprint(trt_model, input_shape=(1, *input_shape))
-            wt_orig = get_model_weights_size(model)
-            wt_opt = get_model_weights_size(trt_model)
+
+            # Evaluate accuracy
+            print("\nEvaluating accuracy...")
+            try:
+                acc = evaluate_accuracy(model, trt_model, num_samples=32, input_shape=input_shape, device="cuda")
+                print("✓ Accuracy evaluation complete")
+            except Exception as e:
+                print(f"Note: Accuracy evaluation skipped ({e})")
+                acc = None
 
             print("\n📈 Optimization Results")
             print("=" * 40)
-            print(f"Model Weights: {wt_orig:.1f} MB → {wt_opt:.1f} MB")
-            print(f"GPU Memory (peak): {mem_orig:.1f} MB → {mem_opt:.1f} MB")
-            print(f"Speed: {orig_stats['avg_ms']:.1f} ms → {opt_stats['avg_ms']:.1f} ms")
+            print(f"GPU Memory Usage: {mem_orig:.1f} MB → {mem_opt:.1f} MB")
+            print(f"Inference Speed: {orig_stats['avg_ms']:.1f} ms → {opt_stats['avg_ms']:.1f} ms")
             speedup = orig_stats['avg_ms'] / opt_stats['avg_ms'] if opt_stats['avg_ms'] > 0 else float('inf')
             print(f"Speedup: {speedup:.1f}x")
             if acc:
-                print(f"Accuracy (Top1): {acc['top1']:.1f}%, Top5: {acc['top5']:.1f}%")
+                print(f"Accuracy Match: {acc['top1']:.1f}% (top-1), {acc['top5']:.1f}% (top-5)")
             print("=" * 40)
             return trt_model
         except Exception as e:
