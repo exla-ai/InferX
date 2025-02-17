@@ -10,6 +10,7 @@ from docker.errors import NotFound, APIError
 import threading
 import itertools
 from ._base import Deepseek_R1_Base
+from docker.types import DeviceRequest  
 
 # Set up basic logging
 logging.basicConfig(level=logging.WARNING)  # Only show warnings and above
@@ -120,7 +121,6 @@ class DockerManager:
             finally:
                 self.containers.pop(name, None)
 
-
 class Deepseek_R1_GPU(Deepseek_R1_Base):
     """
     Manages the lifecycle of the Deepseek language server and the Open WebUI chat container.
@@ -129,9 +129,10 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
                  model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
                  server_port=8000,
                  webui_port=3000):
+        print("Initializing Deepseek R1 model for GPU...")
         self.model_name = model_name
         self.server_port = server_port
-        self.webui_port = webui_port
+        self.webui_port = webui_port  # Fixed assignment here
         self.docker_manager = DockerManager()
         self.running = True
 
@@ -151,97 +152,74 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         self.docker_manager.stop_all()
 
     def start_server(self):
-        """Start the Deepseek language server container."""
-        with ProgressIndicator("Initializing language server"):
-            image = "vllm/vllm-openai:latest"
-            self.docker_manager.pull_image(image)
+        """Start Exla server in a Docker container using the DockerManager interface."""
+        image = "vllm/vllm-openai:latest"
+        self.docker_manager.pull_image(image)
 
-            # Build the command-line arguments for vLLM serve.
-            cmd = [
-                "--model", self.model_name,
-                "--host", "0.0.0.0",
-                "--port", f"{self.server_port}",
-                "--trust-remote-code",
-                "--dtype", "half",
-                "--served-model-name", "deepseek-r1",
-                "--disable-log-requests",
-                "--enable-reasoning",               
-                "--reasoning-parser", "deepseek_r1"            
-            ]
+        # Build the command arguments for the language server.
+        cmd = [
+            "--model", self.model_name,
+            "--enable-reasoning",
+            "--reasoning-parser", "deepseek_r1",
+            "--uvicorn-log-level", "debug",
+            "--return-tokens-as-token-ids"
+        ]
 
-            # Environment variables for the server.
-            env = {}
-
-            volumes = {
-                f"{str(Path.home())}/.cache/huggingface": {
-                    "bind": "/root/.cache/huggingface",
-                    "mode": "rw"
-                }
+        volumes = {
+            f"{str(Path.home())}/.cache/huggingface": {
+                "bind": "/root/.cache/huggingface",
+                "mode": "rw"
             }
+        }
+        ports = {"8000/tcp": self.server_port}
 
-            ports = {"8000/tcp": self.server_port}
+        # Enable GPU support using Docker's DeviceRequest.
+        device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
 
-            # Define device_requests for GPU support.
-            from docker.types import DeviceRequest
-            device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
-
-            # Start the server container with GPU support, environment variables, and our updated command.
-            self.docker_manager.run_container(
-                name="exla-language-server",
-                image=image,
-                command=cmd,
-                ports=ports,
-                volumes=volumes,
-                detach=True,
-                device_requests=device_requests,
-                shm_size="8g",
-                environment=env
-            )
+        container = self.docker_manager.run_container(
+            name="exla-language-server",
+            image=image,
+            command=cmd,
+            ports=ports,
+            volumes=volumes,
+            detach=True,
+            device_requests=device_requests,
+            shm_size="8g"
+        )
+        self._container_id = container.id  # Store container ID for cleanup
+        print(f"Exla server started with container ID: {self._container_id}")
 
     def start_webui(self):
-        """Start the Open WebUI container."""
-        with ProgressIndicator("Initializing chat interface"):
-            image = "ghcr.io/open-webui/open-webui:latest"
-            self.docker_manager.pull_image(image)
+        """Start the Open WebUI chat interface in a Docker container using the DockerManager interface."""
+        image = "ghcr.io/open-webui/open-webui:main"
+        self.docker_manager.pull_image(image)
 
-            env = {
-                "OPENAI_API_BASE": f"http://exla-language-server:{self.server_port}/v1",
-                "OPENAI_API_KEY": "EMPTY",
-                "WEBUI_AUTH": "false",
-                "MODEL": "deepseek-r1",
-                "OPENAI_MODEL": "deepseek-r1",
-                "DEFAULT_MODEL": "deepseek-r1",
-                "MODELS": "deepseek-r1",
-                "COMPLETION_MODEL": "deepseek-r1",
-                "CHAT_MODEL": "deepseek-r1",
-                "INIT_COMMANDS": "update-models",
-                "AVAILABLE_MODELS": "deepseek-r1",
-                "MODEL_LIST": "deepseek-r1",
-                "FORCE_MODEL_LIST": "true",
-                "DEBUG": "true",
-                "ENDPOINTS": f'[{{"name":"DeepSeek","url":"http://exla-language-server:{self.server_port}/v1","api_key":"EMPTY"}}]',
-                "ENDPOINTS_TYPE": "openai",
-                "DISABLE_AUTH": "true"
-            }
+        env = {
+            # Instead of "localhost", use the container name "exla-language-server"
+            "OPENAI_API_BASE_URL": "http://exla-language-server:8000/v1",
+            "OPENAI_API_KEY": "EMPTY",
+            "ENABLE_OLLAMA_API": "false",
+            "ENABLE_RAG_WEB_SEARCH": "true",
+            "RAG_WEB_SEARCH_ENGINE": "duckduckgo",
+            "WEBUI_AUTH": "false",
+            "DISABLE_AUTH": "true"
+        }
 
-            volumes = {
-                "open-webui": {
-                    "bind": "/app/backend/data",
-                    "mode": "rw"
-                }
-            }
+        volumes = {
+            "open-webui": {"bind": "/app/backend/data", "mode": "rw"}
+        }
+        ports = {"8080/tcp": self.webui_port}  # Maps container port 8080 to host port
 
-            ports = {"8080/tcp": self.webui_port}
-
-            self.docker_manager.run_container(
-                name="open-webui",
-                image=image,
-                environment=env,
-                ports=ports,
-                volumes=volumes,
-                detach=True,
-                restart_policy={"Name": "always"}
-            )   
+        container = self.docker_manager.run_container(
+            name="open-webui",
+            image=image,
+            environment=env,
+            ports=ports,
+            volumes=volumes,
+            detach=True,
+            restart_policy={"Name": "always"}
+        )
+        print("Chat interface available at: http://localhost:{}".format(self.webui_port))
 
     def run(self):
         """Start both services and keep the process alive."""
@@ -249,6 +227,6 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         self.start_webui()
         print(f"\n✨ Chat interface ready at: http://localhost:{self.webui_port}")
         print("\nPress Ctrl+C to stop...")
-        
+
         while self.running:
             time.sleep(1)
