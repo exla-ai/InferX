@@ -19,7 +19,7 @@ def _suppress_c_logs():
         return None
 
 # Suppress C-level logs before any imports
-# original_stderr = _suppress_c_logs()
+original_stderr = _suppress_c_logs()
 
 # Now import remaining modules
 import torch_tensorrt
