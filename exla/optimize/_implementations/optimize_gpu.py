@@ -155,10 +155,27 @@ def get_model_memory_footprint(model, input_shape=(1, 3, 224, 224), device="cuda
 # Utility function: Compute the total size of model weights (in MB).
 def get_model_weights_size(model):
     try:
+        # First try to get size from state_dict
         size = 0
-        for param in model.state_dict().values():
-            size += param.nelement() * param.element_size()
-        return size / (1024 * 1024)
+        try:
+            for param in model.state_dict().values():
+                size += param.nelement() * param.element_size()
+            return size / (1024 * 1024)
+        except Exception:
+            # If state_dict fails (e.g. for TensorRT models), try saving the model
+            tmp_path = "tmp_model.pt"
+            try:
+                torch.save(model, tmp_path)
+                size = Path(tmp_path).stat().st_size / (1024 * 1024)
+                os.remove(tmp_path)
+                return size
+            except Exception:
+                # If direct save fails, try to save traced model
+                traced = torch.jit.trace(model, torch.randn(1, 3, 224, 224, device="cuda"))
+                torch.jit.save(traced, tmp_path)
+                size = Path(tmp_path).stat().st_size / (1024 * 1024)
+                os.remove(tmp_path)
+                return size
     except Exception:
         return 0
 
