@@ -1,6 +1,4 @@
-from ...base_model import BaseModel
-
-class Deepseek_R1_Base(BaseModel):
+class Deepseek_R1_Base:
     def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"):
         super().__init__()
         

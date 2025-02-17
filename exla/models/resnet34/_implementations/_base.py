@@ -1,6 +1,4 @@
-from ...base_model import BaseModel
-
-class Resnet34_Base(BaseModel):
+class Resnet34_Base:
     def __init__(self):
         super().__init__()
         

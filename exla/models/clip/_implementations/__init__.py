@@ -1,4 +1,4 @@
-from exla.device_detect import detect_device
+from exla.utils.device_detect import detect_device
 from .clip_cpu import Clip_CPU
 from .clip_orin_nano import Clip_Orin_Nano
 from .clip_gpu import Clip_GPU

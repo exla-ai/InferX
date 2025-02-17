@@ -1,6 +1,4 @@
-from ...base_model import BaseModel
-
-class MobileNetBase(BaseModel):
+class MobileNetBase:
     def __init__(self):
         super().__init__()
         
