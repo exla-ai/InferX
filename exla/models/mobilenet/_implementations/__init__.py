@@ -1,4 +1,4 @@
-from ...device_detect import detect_device
+from exla.device_detect import detect_device
 from .mobilenet_a100 import MobileNetA100
 from .mobilenet_orin_nano import MobileNetOrinNano
 from .mobilenet_cpu import MobileNetCPU

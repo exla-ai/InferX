@@ -1,4 +1,4 @@
-from ...device_detect import detect_device
+from exla.device_detect import detect_device
 from .resnet34_orin_nano import Resnet34_Orin_Nano
 from .resnet34_cpu import Resnet34_CPU
 
