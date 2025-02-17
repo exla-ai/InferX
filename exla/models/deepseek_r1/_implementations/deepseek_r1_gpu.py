@@ -168,8 +168,8 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
     """
     def __init__(self,
                  model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
-                 server_port=8000,
-                 webui_port=3000):
+                 server_port=8001,
+                 webui_port=3001):
         self.model_name = model_name
         self.server_port = server_port
         self.webui_port = webui_port
@@ -222,7 +222,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
                 "mode": "rw"
             }
         }
-        ports = {"8000/tcp": self.server_port}
+        ports = {"8001/tcp": self.server_port}
         self.progress.complete_step("Memory mapping configured")
 
         self.progress.start_step("Launching optimized inference engine...")
@@ -253,7 +253,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
 
         env = {
             # Instead of "localhost", use the container name "exla-language-server"
-            "OPENAI_API_BASE_URL": "http://exla-language-server:8000/v1",
+            "OPENAI_API_BASE_URL": "http://exla-language-server:8001/v1",
             "OPENAI_API_KEY": "EMPTY",
             "ENABLE_OLLAMA_API": "false",
             "ENABLE_RAG_WEB_SEARCH": "true",
@@ -283,7 +283,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
             self.start_server()
         with ProgressIndicator("Initializing Exla chat interface"):
             self.start_webui()
-        print(f"\n✨ Chat interface ready at: http://localhost:{self.webui_port}")
+        print(f"\n✨ Chat interface ready at: http://localhost:3000")
         print("\nPress Ctrl+C to stop...")
         while self.running:
             time.sleep(1)
