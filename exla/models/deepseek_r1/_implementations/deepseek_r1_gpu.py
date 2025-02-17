@@ -129,7 +129,6 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
                  model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
                  server_port=8000,
                  webui_port=3000):
-        print("Initializing Deepseek R1 model for GPU...")
         self.model_name = model_name
         self.server_port = server_port
         self.webui_port = webui_port  # Fixed assignment here
@@ -187,7 +186,6 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
             shm_size="8g"
         )
         self._container_id = container.id  # Store container ID for cleanup
-        print(f"Exla server started with container ID: {self._container_id}")
 
     def start_webui(self):
         """Start the Open WebUI chat interface in a Docker container using the DockerManager interface."""
@@ -219,14 +217,15 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
             detach=True,
             restart_policy={"Name": "always"}
         )
-        print("Chat interface available at: http://localhost:{}".format(self.webui_port))
 
     def run(self):
         """Start both services and keep the process alive."""
-        self.start_server()
-        self.start_webui()
+        with ProgressIndicator("Initializing Exla language server"):
+            self.start_server()
+        with ProgressIndicator("Initializing Exla chat interface"):
+            self.start_webui()
         print(f"\n✨ Chat interface ready at: http://localhost:{self.webui_port}")
         print("\nPress Ctrl+C to stop...")
-
         while self.running:
             time.sleep(1)
+
