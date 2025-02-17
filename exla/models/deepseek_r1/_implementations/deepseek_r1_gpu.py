@@ -29,11 +29,15 @@ class OptimizationProgress:
         
     def start_step(self, message):
         spinner = next(self._spinner_cycle)
+        # Ensure we clear the entire line before writing
+        sys.stdout.write("\r" + " " * 100)  # Clear line
         sys.stdout.write(f"\r{spinner} [{self._get_elapsed()}] {message}")
         sys.stdout.flush()
         
     def complete_step(self, message, success=True):
         symbol = "✓" if success else "✗"
+        # Ensure we clear the entire line before writing final message
+        sys.stdout.write("\r" + " " * 100)  # Clear line
         sys.stdout.write(f"\r{symbol} [{self._get_elapsed()}] {message}\n")
         sys.stdout.flush()
 
@@ -168,8 +172,8 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
     """
     def __init__(self,
                  model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
-                 server_port=8001,
-                 webui_port=3001):
+                 server_port=8000,
+                 webui_port=3000):
         self.model_name = model_name
         self.server_port = server_port
         self.webui_port = webui_port
@@ -196,11 +200,11 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         """Start Exla server in a Docker container using the DockerManager interface."""
         image = "vllm/vllm-openai:latest"
         
-        self.progress.start_step("Initializing model optimization engine...")
+        self.progress.start_step("Initializing optimization engine...")
         self.docker_manager.pull_image(image)
         self.progress.complete_step("Optimization engine initialized")
         
-        self.progress.start_step("Analyzing available GPU hardware...")
+        self.progress.start_step("Analyzing hardware capabilities...")
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
         self.progress.complete_step("Hardware analysis complete")
         
@@ -215,17 +219,17 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         ]
         self.progress.complete_step("Model architecture optimized")
 
-        self.progress.start_step("Setting up optimized memory mapping...")
+        self.progress.start_step("Configuring memory mapping...")
         volumes = {
             f"{str(Path.home())}/.cache/huggingface": {
                 "bind": "/root/.cache/huggingface",
                 "mode": "rw"
             }
         }
-        ports = {"8001/tcp": self.server_port}
+        ports = {"8000/tcp": self.server_port}
         self.progress.complete_step("Memory mapping configured")
 
-        self.progress.start_step("Launching optimized inference engine...")
+        self.progress.start_step("Launching inference engine...")
         container = self.docker_manager.run_container(
             name="exla-language-server",
             image=image,
@@ -253,7 +257,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
 
         env = {
             # Instead of "localhost", use the container name "exla-language-server"
-            "OPENAI_API_BASE_URL": "http://exla-language-server:8001/v1",
+            "OPENAI_API_BASE_URL": "http://exla-language-server:8000/v1",
             "OPENAI_API_KEY": "EMPTY",
             "ENABLE_OLLAMA_API": "false",
             "ENABLE_RAG_WEB_SEARCH": "true",
@@ -283,7 +287,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
             self.start_server()
         with ProgressIndicator("Initializing Exla chat interface"):
             self.start_webui()
-        print(f"\n✨ Chat interface ready at: http://localhost:3000")
+        print(f"\n✨ Chat interface ready at: http://localhost:{self.webui_port}")
         print("\nPress Ctrl+C to stop...")
         while self.running:
             time.sleep(1)
