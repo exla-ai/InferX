@@ -18,18 +18,29 @@
             "pages": [
               "introduction",
               "quickstart",
+              "installation",
               "compatibility"
+            ]
+          },
+          {
+            "group": "Usage",
+            "pages": [
+              "guides/serving-models",
+              "guides/custom-models"
             ]
           }
         ]
       },
       {
-        "tab": "API Reference",
+        "tab": "Model Reference",
         "groups": [
           {
-            "group": "Models",
+            "group": "Available Models",
             "pages": [
-              "api-reference/models/deepseek"
+              "models/deepseek",
+              "models/clip",
+              "models/mobilenet",
+              "models/resnet34"
             ]
           }
         ]
