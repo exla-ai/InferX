@@ -22,7 +22,47 @@ Optimizing models for edge devices like NVIDIA Jetsons and Raspberry Pis is noto
 
 ## Getting Started
 
-To start using Exla in your project, check out our [Quickstart Guide](/quickstart) or explore our [Hardware & Model Compatibility](/compatibility).
+### Installation
+
+1. First, request an access token by emailing us at contact@exla.ai
+
+2. Once you have your token, install Exla using `uv`:
+```bash
+uv pip install --index-url https://pypi.exla.ai/<your-token>/simple exla
+```
+
+### Basic Usage
+
+#### Running DeepSeek
+```python
+from exla.models import DeepSeekR1
+
+# Initialize the model
+model = DeepSeekR1()
+
+# Generate text
+response = model.generate("Tell me about artificial intelligence")
+print(response)
+```
+
+#### Running Your Custom Model
+```python
+from exla import Model
+from exla.config import ModelConfig
+
+# Define your model configuration
+config = ModelConfig(
+    model_path="path/to/your/model",
+    model_type="transformer",  # or "vision", "diffusion", etc.
+    target_device="gpu"  # or "cpu", "orin_nano", etc.
+)
+
+# Initialize and run your model
+model = Model(config)
+output = model.run(your_input)
+```
+
+For more detailed examples and advanced usage, check out our [Quickstart Guide](/quickstart) or explore our [Hardware & Model Compatibility](/compatibility).
 
 ## Connect With Us
 
