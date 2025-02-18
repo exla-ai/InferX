@@ -1,0 +1,48 @@
+---
+title: 'Hardware & Model Compatibility'
+description: 'Supported hardware platforms and AI models'
+---
+
+# Hardware & Model Compatibility
+
+## Supported Hardware Platforms
+
+### NVIDIA GPUs
+- NVIDIA RTX 3090
+- NVIDIA RTX 4090
+- NVIDIA Jetson Series
+  - Jetson AGX Xavier
+  - Jetson Nano
+  - Jetson TX2
+
+### Edge Devices
+- Raspberry Pi 4
+- Intel NUC
+- Various ARM-based devices
+
+## Supported Models
+
+### Language Models
+- DeepSeek
+  - Supported operations: Text generation, embeddings
+  - Optimized for: RTX 3090, RTX 4090
+  - Quantization: 4-bit, 8-bit options available
+
+### Vision Models
+- Coming soon
+
+## Performance Matrix
+
+| Model | Hardware | Original Size | Optimized Size | Speed Improvement |
+|-------|----------|---------------|----------------|-------------------|
+| DeepSeek | RTX 3090 | Coming soon | Coming soon | Coming soon |
+| DeepSeek | RTX 4090 | Coming soon | Coming soon | Coming soon |
+
+## Optimization Features by Hardware
+
+| Feature | RTX 30/40 Series | Jetson | Raspberry Pi |
+|---------|------------------|---------|--------------|
+| Mixed Precision Quantization | ✅ | ✅ | ✅ |
+| Structured Pruning | ✅ | ✅ | ✅ |
+| Kernel Fusion | ✅ | ✅ | ❌ |
+| TensorRT Optimization | ✅ | ✅ | ❌ | 

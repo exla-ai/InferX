@@ -1,11 +1,11 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Exla",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#4F46E5",
+    "light": "#818CF8",
+    "dark": "#3730A3"
   },
   "favicon": "/favicon.svg",
   "navigation": {
@@ -14,11 +14,11 @@
         "tab": "Guides",
         "groups": [
           {
-            "group": "Get Started",
+            "group": "Getting Started",
             "pages": [
               "introduction",
               "quickstart",
-              "development"
+              "compatibility"
             ]
           },
           {
@@ -76,7 +76,8 @@
   },
   "logo": {
     "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "dark": "/logo/dark.svg",
+    "href": "https://exla.ai"
   },
   "navbar": {
     "links": [
@@ -97,5 +98,9 @@
       "github": "https://github.com/mintlify",
       "linkedin": "https://linkedin.com/company/mintlify"
     }
+  },
+  "footerSocials": {
+    "twitter": "https://x.com/exla_ai",
+    "linkedin": "https://linkedin.com/company/106019408"
   }
 }
