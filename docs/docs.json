@@ -76,7 +76,7 @@
   },
   "logo": {
     "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg",
+    "dark": "/logo/light.svg",
     "href": "https://exla.ai"
   },
   "navbar": {
