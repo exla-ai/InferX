@@ -1,0 +1,176 @@
+---
+title: 'Optimizing Custom Models'
+description: 'Optimize and deploy your own models with Exla'
+---
+
+# Optimizing Custom Models
+
+Exla makes it easy to optimize your own models for efficient deployment. This guide shows you how to optimize custom-trained models while maintaining accuracy.
+
+## Quick Start
+
+The fastest way to optimize your model is using the `optimize_model` function:
+
+```python
+from exlasdk import optimize_model
+
+# Optimize your model - automatically configured for your hardware
+optimized_model = optimize_model("mymodel.pth")
+```
+
+This will:
+1. Analyze your model architecture
+2. Apply hardware-aware optimizations
+3. Return an optimized version ready for deployment
+
+## Supported Formats
+
+Exla supports models from popular frameworks:
+- PyTorch (`.pth`, `.pt`)
+- ONNX (`.onnx`)
+- TensorFlow SavedModel
+- Hugging Face Transformers
+
+## Advanced Configuration
+
+For more control over the optimization process:
+
+```python
+from exla import Model
+from exla.config import ModelConfig
+
+# Configure optimization settings
+config = ModelConfig(
+    model_path="path/to/your/model",
+    model_type="transformer",  # or "vision"
+    target_device="gpu",      # or "cpu", "orin_nano"
+    optimization_level="max",  # Control optimization aggressiveness
+    quantization={
+        "precision": "int8"   # Reduce model size
+    }
+)
+
+# Initialize and optimize
+model = Model(config)
+
+# Run inference
+output = model.run(your_input)
+```
+
+## Optimization Techniques
+
+Exla applies several optimization techniques:
+
+### Quantization
+Reduce model size and improve speed:
+```python
+config = ModelConfig(
+    model_path="path/to/your/model",
+    quantization={
+        "precision": "int8",      # int8, int16, float16
+        "calibration_data": data  # Optional calibration
+    }
+)
+```
+
+### Pruning
+Remove redundant weights:
+```python
+config = ModelConfig(
+    model_path="path/to/your/model",
+    pruning={
+        "target_sparsity": 0.5,  # Remove 50% of weights
+        "method": "magnitude"    # Pruning strategy
+    }
+)
+```
+
+### Kernel Fusion
+Optimize computation graphs:
+```python
+config = ModelConfig(
+    model_path="path/to/your/model",
+    optimization_level="max",
+    fusion_patterns=["attention", "mlp"]
+)
+```
+
+## Example: Text Processing Pipeline
+
+Here's a complete example of optimizing a text processing model:
+
+```python
+from exla import Model
+from exla.config import ModelConfig
+
+def create_text_processor(model_path):
+    """Create an optimized text processing pipeline"""
+    config = ModelConfig(
+        model_path=model_path,
+        model_type="transformer",
+        target_device="gpu",
+        optimization_level="max"
+    )
+    
+    model = Model(config)
+    
+    def process(text, task):
+        """Run inference with the optimized model"""
+        input_data = {
+            "text": text,
+            "task": task
+        }
+        return model.run(input_data)
+    
+    return process
+
+# Usage
+processor = create_text_processor("path/to/your/model")
+summary = processor("Long text to process...", task="summarize")
+```
+
+## Hardware Support
+
+Exla optimizes models for various targets:
+
+### NVIDIA GPUs
+```python
+config = ModelConfig(
+    model_path="path/to/your/model",
+    target_device="gpu",
+    gpu_config={
+        "compute_capability": "8.6",
+        "memory_limit": "4G"
+    }
+)
+```
+
+### Edge Devices
+```python
+config = ModelConfig(
+    model_path="path/to/your/model",
+    target_device="orin_nano",
+    edge_config={
+        "power_mode": "max_efficiency",
+        "tensor_cores": True
+    }
+)
+```
+
+### CPU
+```python
+config = ModelConfig(
+    model_path="path/to/your/model",
+    target_device="cpu",
+    cpu_config={
+        "num_threads": 4,
+        "enable_mkldnn": True
+    }
+)
+```
+
+## Next Steps
+
+- Try our [pre-built models](/guides/serving-models)
+- Check out more [examples](https://github.com/exla/exla-sdk/tree/main/examples)
+- Join our community on [Twitter](https://x.com/exla_ai) 

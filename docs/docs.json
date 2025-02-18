@@ -7,19 +7,16 @@
     "light": "#818CF8",
     "dark": "#3730A3"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/logo/favicon.svg",
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Getting Started",
         "groups": [
           {
-            "group": "Getting Started",
+            "group": "Introduction",
             "pages": [
-              "introduction",
-              "quickstart",
-              "installation",
-              "compatibility"
+              "introduction"
             ]
           },
           {
@@ -38,9 +35,7 @@
             "group": "Available Models",
             "pages": [
               "models/deepseek",
-              "models/clip",
-              "models/mobilenet",
-              "models/resnet34"
+              "models/clip"
             ]
           }
         ]
@@ -48,8 +43,8 @@
     ]
   },
   "logo": {
-    "light": "assets/logo/light.svg",
-    "dark": "assets/logo/dark.svg",
+    "light": "/logo/logo.png",
+    "dark": "/logo/logo.png",
     "href": "https://exla.ai"
   },
   "navbar": {
