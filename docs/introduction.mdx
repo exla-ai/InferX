@@ -22,7 +22,9 @@ It abstracts the complexity of model optimization, so you can focus on building 
 
 Optimizing models for edge devices like NVIDIA Jetsons and Raspberry Pis is notoriously complex and time-consuming. Exla automates this process, making it possible to run large models on low-power hardware without sacrificing performance.
 
-## Installation
+## Getting Started
+
+### Installation
 
 1. First, request an access token by emailing us at contact@exla.ai
 
@@ -31,283 +33,38 @@ Optimizing models for edge devices like NVIDIA Jetsons and Raspberry Pis is noto
 uv pip install --index-url https://pypi.exla.ai/<your-token>/simple exla
 ```
 
-## Using Exla
+### Basic Usage
 
-Choose how you want to use Exla:
-
-1. [Pre-built Models](#pre-built-models)
-   - Ready-to-use optimized models
-   - No setup required
-   - Includes DeepSeek, CLIP, and more
-
-2. [Custom Models](#custom-models)
-   - Deploy your own models
-   - Hardware-aware optimization
-   - Full configuration control
-
-3. [Model Optimization](#model-optimization)
-   - Quantization techniques
-   - Pruning strategies
-   - Kernel fusion
-
-4. [Hardware Support](#hardware-support)
-   - NVIDIA GPUs
-   - Edge devices (Jetson)
-   - CPU deployment
-
-5. [Example Applications](#example-applications)
-   - Text processing
-   - Image classification
-   - Real-time inference
-
-### Pre-built Models
-
-Exla provides optimized versions of popular AI models that are ready to use out of the box. Here are some examples:
-
-#### Text Generation with DeepSeek
+#### Running DeepSeek
 ```python
-from exla.models.deepseek_r1 import deepseek_r1
+from exla.models import DeepSeekR1
 
 # Initialize the model
-model = deepseek_r1()
+model = DeepSeekR1()
 
 # Generate text
-response = model.run("Explain quantum computing in simple terms")
+response = model.generate("Tell me about artificial intelligence")
 print(response)
 ```
 
-#### Image Understanding with CLIP
-```python
-from exla.models.clip import Clip_GPU
-
-# Initialize CLIP model
-model = Clip_GPU()
-
-# Analyze image-text similarity
-image_paths = ["path/to/image1.jpg", "path/to/image2.jpg"]
-text_queries = ["a dog", "a cat", "a bird"]
-
-# Get similarity scores for each text query against the images
-results = model.inference(image_paths, text_queries)
-
-# Results will contain scores for each text-image pair
-for result in results:
-    for query, matches in result.items():
-        print(f"\nResults for query: {query}")
-        for match in matches:
-            print(f"Image: {match['image_path']}, Score: {match['score']}")
-```
-
-### Custom Models
-
-Exla makes it easy to optimize and deploy your own models. Follow these steps to get started:
-
-1. **Prepare Your Model**
-   - Export your model in a supported format (ONNX, TensorFlow SavedModel, PyTorch JIT)
-   - Gather your model's input/output specifications
-
-2. **Configure Optimization**
+#### Running Your Custom Model
 ```python
 from exla import Model
 from exla.config import ModelConfig
 
-# Configure your model with optimization settings
+# Define your model configuration
 config = ModelConfig(
     model_path="path/to/your/model",
-    model_type="transformer",  # Options: "transformer", "vision"
-    target_device="gpu",      # Options: "gpu", "cpu", "orin_nano"
-    optimization_level="max"   # Enable maximum optimization
+    model_type="transformer",  # or "vision", "diffusion", etc.
+    target_device="gpu"  # or "cpu", "orin_nano", etc.
 )
 
-# Initialize and optimize the model
+# Initialize and run your model
 model = Model(config)
+output = model.run(your_input)
 ```
 
-3. **Deploy and Run**
-```python
-# Run inference
-input_data = "Your input data here"
-output = model.run(input_data)
-```
-
-### Model Optimization
-
-Exla provides several optimization techniques to improve your model's performance:
-
-#### Quantization
-Reduce model size and improve inference speed by converting weights to lower precision:
-
-```python
-config = ModelConfig(
-    model_path="path/to/your/model",
-    quantization={
-        "precision": "int8",      # Options: "int8", "int16", "float16"
-        "calibration_data": data  # Optional: Data for calibrating quantization
-    }
-)
-```
-
-#### Pruning
-Remove redundant weights while maintaining accuracy:
-
-```python
-config = ModelConfig(
-    model_path="path/to/your/model",
-    pruning={
-        "target_sparsity": 0.5,   # Target percentage of weights to remove
-        "method": "magnitude"      # Pruning method to use
-    }
-)
-```
-
-#### Kernel Fusion
-Optimize computation graphs for better performance:
-
-```python
-config = ModelConfig(
-    model_path="path/to/your/model",
-    optimization_level="max",      # Enables kernel fusion
-    fusion_patterns=["attention", "mlp"]  # Specific patterns to fuse
-)
-```
-
-### Hardware Support
-
-Exla optimizes models for various hardware targets:
-
-#### NVIDIA GPUs
-```python
-# For NVIDIA GPUs with CUDA support
-config = ModelConfig(
-    model_path="path/to/your/model",
-    target_device="gpu",
-    gpu_config={
-        "compute_capability": "8.6",  # GPU architecture version
-        "memory_limit": "4G"          # Maximum GPU memory to use
-    }
-)
-```
-
-#### Edge Devices
-```python
-# For NVIDIA Jetson devices
-config = ModelConfig(
-    model_path="path/to/your/model",
-    target_device="orin_nano",
-    edge_config={
-        "power_mode": "max_efficiency",
-        "tensor_cores": True
-    }
-)
-```
-
-#### CPU
-```python
-# For CPU deployment
-config = ModelConfig(
-    model_path="path/to/your/model",
-    target_device="cpu",
-    cpu_config={
-        "num_threads": 4,
-        "enable_mkldnn": True
-    }
-)
-```
-
-### Example Applications
-
-Here are some real-world examples of using Exla:
-
-#### Text Processing Pipeline
-```python
-from exla import Model
-from exla.config import ModelConfig
-
-def create_text_processor(model_path):
-    """
-    Create a text processing pipeline using a custom model
-    """
-    config = ModelConfig(
-        model_path=model_path,
-        model_type="transformer",
-        target_device="gpu",
-        optimization_level="max"
-    )
-    
-    model = Model(config)
-    
-    def process(text, task):
-        """
-        Process text with different tasks like summarization,
-        translation, or sentiment analysis
-        """
-        input_data = {
-            "text": text,
-            "task": task
-        }
-        return model.run(input_data)
-    
-    return process
-
-# Usage
-processor = create_text_processor("path/to/your/model")
-
-# Example: Summarize text
-text = "Long article or document that needs to be summarized..."
-summary = processor(text, task="summarize")
-print(summary)
-```
-
-#### Real-time Image Classification
-```python
-from exla import Model
-from exla.config import ModelConfig
-import cv2
-
-def create_image_classifier():
-    config = ModelConfig(
-        model_path="path/to/vision/model",
-        model_type="vision",
-        target_device="gpu",
-        optimization_level="max",
-        batch_processing=True
-    )
-    
-    model = Model(config)
-    
-    def process_frame(frame):
-        # Preprocess image
-        input_tensor = cv2.resize(frame, (224, 224))
-        input_tensor = input_tensor / 255.0  # Normalize
-        
-        # Run inference
-        predictions = model.run(input_tensor)
-        return predictions
-    
-    return process_frame
-
-# Usage with webcam
-classifier = create_image_classifier()
-cap = cv2.VideoCapture(0)
-
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-        
-    # Get predictions
-    predictions = classifier(frame)
-    
-    # Display results
-    for label, confidence in predictions:
-        print(f"Detected: {label} ({confidence:.2f})")
-```
-
-For more examples and detailed guides, check out:
-- [Model Optimization Guide](/guides/optimization) - Learn about optimization techniques
-- [Hardware Compatibility](/guides/hardware) - Supported devices and configurations
-- [Example Models](/examples) - Complete example projects
-- [API Reference](/api) - Detailed API documentation
+For more detailed examples and advanced usage, check out our [Quickstart Guide](/quickstart) or explore our [Hardware & Model Compatibility](/compatibility).
 
 ## Connect With Us
 
