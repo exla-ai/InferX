@@ -17,5 +17,3 @@ echo "Installing required packages..."
 echo "Setup complete! Activate the virtual environment if not already activated with: source .venv/bin/activate"
 uv pip install -r pyproject.toml
 uv pip install -e .
-
-

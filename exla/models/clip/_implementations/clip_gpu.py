@@ -4,7 +4,6 @@ import random
 import atexit
 import signal
 from pathlib import Path
-from clip_client import Client
 
 class Clip_GPU:
     def __init__(self):
@@ -18,7 +17,16 @@ class Clip_GPU:
         signal.signal(signal.SIGTERM, self._signal_handler)
         
         self._start_server()
+        self.install_dependencies()
         self._setup_client()
+
+    def install_dependencies(self):
+        """
+        Installs the dependencies for the CLIP GPU model.
+        """
+        subprocess.run([
+            "uv", "pip", "install", "clip-client", "docarray"
+        ], check=True)
 
     def _start_server(self):
         """Start the CLIP server using Docker."""
@@ -26,20 +34,16 @@ class Clip_GPU:
             print(f"Starting CLIP server on port {self._port}...")
             
             # Start container and get its ID
-            result = subprocess.run(
-                [
-                    "sudo", "docker", "run",
-                    "-d",  # Run in detached mode
-                    "--rm",  # Automatically remove container when it exits
-                    "-p", f"{self._port}:51000",
-                    "-v", f"{str(Path.home())}/.cache:/home/cas/.cache",
-                    "--gpus", "all",
-                    "jinaai/clip-server:master-tensorrt",
-                    "tensorrt-flow.yml"
-                ],
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run([
+                "sudo", "docker", "run",
+                "-d",  # Run in detached mode
+                "--rm",  # Automatically remove container when it exits
+                "-p", f"{self._port}:51000",
+                "-v", f"{str(Path.home())}/.cache:/home/cas/.cache",
+                "--gpus", "all",
+                "jinaai/clip-server:master-tensorrt",
+                "tensorrt-flow.yml"
+            ], capture_output=True, text=True)
             
             # Store container ID for cleanup
             self._container_id = result.stdout.strip()
@@ -60,6 +64,7 @@ class Clip_GPU:
     def _setup_client(self):
         """Initialize the CLIP client."""
         try:
+            from clip_client import Client
             self._client = Client(f'grpc://0.0.0.0:{self._port}')
             time.sleep(2)  # Give client time to connect
         except Exception as e:
@@ -103,9 +108,6 @@ class Clip_GPU:
             result[doc.text] = matches_list
             results.append(result)
             
-        # Output is a list of dictionaries, each dictionary 
-        #contains a text query and a list of image paths 
-        # and scores and they are sorted by score
         return results
 
     def _cleanup(self):

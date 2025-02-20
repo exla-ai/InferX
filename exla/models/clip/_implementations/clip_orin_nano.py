@@ -1,65 +1,56 @@
 from ._base import Clip_Base
 import os
 import subprocess
-import time
-from PIL import Image
-import shutil
 
 class Clip_Orin_Nano(Clip_Base):
-    def __init__(self, model_name="openai/clip-vit-large-patch14-336", container_tag=None):
+    def __init__(self, model_name="openai/clip-vit-large-patch14-336", container_tag="36.3.0"):
         """
         Initializes CLIP model on Orin Nano using the clip_trt container.
         
         Args:
             model_name (str): Name of the CLIP model to use (from HuggingFace)
-            container_tag (str): Version tag for the clip_trt container. If None, will use autotag
+            container_tag (str): Version tag for the clip_trt container. Defaults to 36.3.0
         """
         self.model_name = model_name
-        self._setup_container(container_tag)
-        
-    def _setup_container(self, container_tag):
+        self.container_tag = container_tag
+        self._setup_container()
+        self.install_dependencies()
+
+    def install_dependencies(self):
         """
-        Ensures the clip_trt container is available and properly set up.
-        Will attempt to install jetson-containers if not present.
+        Installs the dependencies for the CLIP model on Orin Nano.
         """
-        # First check if jetson-containers is installed
-        if not os.path.exists(os.path.expanduser("~/jetson-containers")):
-            print("Installing jetson-containers...")
-            subprocess.run([
-                "git", "clone", "https://github.com/dusty-nv/jetson-containers",
-                os.path.expanduser("~/jetson-containers")
-            ], check=True)
-            subprocess.run([
-                "bash", os.path.expanduser("~/jetson-containers/install.sh")
-            ], check=True)
-        
-        # Get the appropriate container tag if not specified
-        if container_tag is None:
-            try:
-                result = subprocess.run(
-                    ["jetson-containers", "autotag", "clip_trt"],
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
-                self.container_tag = result.stdout.strip()
-            except subprocess.CalledProcessError:
-                raise RuntimeError("Failed to determine compatible clip_trt container tag")
-        else:
-            self.container_tag = container_tag
-            
-        # Build/pull the container
+        subprocess.run([
+            "uv", "pip", "install", "-r", "requirements/requirements_orin_nano.txt"
+        ], check=True)
+
+    def _setup_container(self):
+        """
+        Ensures the clip_trt container is available.
+        """
         try:
-            subprocess.run([
-                "jetson-containers", "build", "clip_trt"
-            ], check=True)
+            # Check if container exists
+            result = subprocess.run([
+                "docker", "images", "-q", f"clip_trt:{self.container_tag}"
+            ], capture_output=True, text=True, check=True)
+            
+            if not result.stdout.strip():
+                print(f"Pulling clip_trt:{self.container_tag} container...")
+                # Pull the container
+                subprocess.run([
+                    "docker", "run", "--runtime", "nvidia", "-it", "--rm", "--network=host",
+                    f"clip_trt:{self.container_tag}", "echo", "Container setup complete"
+                ], check=True)
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to build clip_trt container: {e}")
+            raise RuntimeError(f"Failed to setup clip_trt container: {e}")
 
     def _load_images(self, image_input):
         """
         Loads images from paths and returns PIL Image objects.
         """
+        from PIL import Image
+        import time
+        
         image_paths = []
         if isinstance(image_input, str):
             if image_input.endswith(".txt"):
@@ -93,6 +84,8 @@ class Clip_Orin_Nano(Clip_Base):
         Returns:
             List of dictionaries containing predictions for each image
         """
+        import shutil
+        
         images, valid_paths = self._load_images(image_paths)
         if not images:
             return {"error": "No valid images found"}
@@ -111,7 +104,7 @@ class Clip_Orin_Nano(Clip_Base):
         try:
             # Run inference using clip_trt's Python module
             cmd = [
-                "jetson-containers", "run",
+                "docker", "run", "--runtime", "nvidia", "--rm", "--network=host",
                 "-v", f"{tmp_dir}:/workspace/images",
                 f"clip_trt:{self.container_tag}",
                 "python3", "-m", "clip_trt",
@@ -139,5 +132,4 @@ class Clip_Orin_Nano(Clip_Base):
             # Cleanup
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    def train(self):
-        pass
+    

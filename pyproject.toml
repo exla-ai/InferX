@@ -5,22 +5,7 @@ description = "EXLA SDK for hardware-optimized ML models"
 authors = [
     {name = "Viraat Das", email = "virat@exla.ai"}
 ]
-dependencies = [
-    "clip-client",
-    "clip-server",
-    "openai",
-    "pillow",
-    "psutil",
-    "vllm",
-    "torch",
-    "transformers",
-    "accelerate",
-    "fastapi",
-    "uvicorn",
-    "pydantic",
-    "requests",
-    "typing-extensions"
-]
+dependencies = []
 
 [build-system]
 requires = ["hatchling"]
