@@ -2,7 +2,7 @@ from ._base import Clip_Base
 import os
 import subprocess
 
-class Clip_Orin_Nano(Clip_Base):
+class Clip_Jetson(Clip_Base):
     def __init__(self, model_name="openai/clip-vit-large-patch14-336", container_tag="36.3.0"):
         """
         Initializes CLIP model on Orin Nano using the clip_trt container.
@@ -21,28 +21,47 @@ class Clip_Orin_Nano(Clip_Base):
         Installs the dependencies for the CLIP model on Orin Nano.
         """
         subprocess.run([
-            "uv", "pip", "install", "-r", "requirements/requirements_orin_nano.txt"
+            "uv", "pip", "install", "-r", "requirements/requirements_jetson.txt"
         ], check=True)
 
     def _setup_container(self):
         """
-        Ensures the clip_trt container is available.
+        Ensures the clip_trt container is available through jetson-containers.
         """
         try:
-            # Check if container exists
-            result = subprocess.run([
-                "docker", "images", "-q", f"clip_trt:{self.container_tag}"
-            ], capture_output=True, text=True, check=True)
-            
-            if not result.stdout.strip():
-                print(f"Pulling clip_trt:{self.container_tag} container...")
-                # Pull the container
+            # First check if jetson-containers is installed
+            print("Checking for jetson-containers...")
+            if not os.path.exists("/usr/local/bin/jetson-containers"):
+                print("Installing jetson-containers...")
+                # Clone the repository
                 subprocess.run([
-                    "docker", "run", "--runtime", "nvidia", "-it", "--rm", "--network=host",
-                    f"clip_trt:{self.container_tag}", "echo", "Container setup complete"
+                    "sudo", "git", "clone", "https://github.com/dusty-nv/jetson-containers.git",
+                    "/tmp/jetson-containers"
                 ], check=True)
+                
+                # Run the install script from the cloned repo with sudo
+                subprocess.run([
+                    "sudo", "bash", "-c", "cd /tmp/jetson-containers && bash install.sh"
+                ], check=True)
+
+            # Use jetson-containers to run clip_trt with sudo
+            print(f"Setting up clip_trt:{self.container_tag} container...")
+            subprocess.run([
+                "sudo", "jetson-containers", "run",
+                f"clip_trt:{self.container_tag}",
+                "echo", "Container setup complete"
+            ], check=True)
+            
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to setup clip_trt container: {e}")
+            raise RuntimeError(
+                f"Failed to setup clip_trt container using jetson-containers: {e}\n"
+                "Please manually install jetson-containers with sudo:\n"
+                "sudo git clone https://github.com/dusty-nv/jetson-containers.git\n"
+                "cd jetson-containers\n"
+                "sudo bash install.sh"
+            )
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error during container setup: {str(e)}")
 
     def _load_images(self, image_input):
         """
@@ -75,7 +94,7 @@ class Clip_Orin_Nano(Clip_Base):
 
     def inference(self, image_paths, classes=[]):
         """
-        Runs CLIP inference using the clip_trt container.
+        Runs CLIP inference using the clip_trt container via jetson-containers.
         
         Args:
             image_paths: String or list of image paths
@@ -94,7 +113,7 @@ class Clip_Orin_Nano(Clip_Base):
         tmp_dir = "/tmp/clip_trt_input"
         os.makedirs(tmp_dir, exist_ok=True)
         
-        # Save images with their original names to preserve paths
+        # Save images with their original names
         temp_paths = []
         for i, (img, orig_path) in enumerate(zip(images, valid_paths)):
             temp_path = os.path.join(tmp_dir, os.path.basename(orig_path))
@@ -102,9 +121,9 @@ class Clip_Orin_Nano(Clip_Base):
             temp_paths.append(temp_path)
 
         try:
-            # Run inference using clip_trt's Python module
+            # Run inference using jetson-containers with sudo
             cmd = [
-                "docker", "run", "--runtime", "nvidia", "--rm", "--network=host",
+                "sudo", "jetson-containers", "run",
                 "-v", f"{tmp_dir}:/workspace/images",
                 f"clip_trt:{self.container_tag}",
                 "python3", "-m", "clip_trt",
@@ -115,7 +134,7 @@ class Clip_Orin_Nano(Clip_Base):
 
             output = subprocess.check_output(cmd, text=True)
             
-            # Parse results - clip_trt outputs similarity scores
+            # Parse results
             predictions = []
             for line in output.strip().split("\n"):
                 if "similarity scores:" in line.lower():

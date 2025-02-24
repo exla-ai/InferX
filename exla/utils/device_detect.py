@@ -13,6 +13,24 @@ def is_jetson_device():
     ]
     return any(os.path.exists(f) for f in jetson_files)
 
+def get_jetson_model():
+    """
+    Get specific Jetson model by reading device tree model file.
+    Returns 'agx_orin' or 'orin_nano' based on the model info.
+    """
+    model_file = '/sys/firmware/devicetree/base/model'
+    if os.path.exists(model_file):
+        try:
+            with open(model_file, 'r') as f:
+                model_info = f.read().lower()
+                if 'agx' in model_info:
+                    return 'agx_orin'
+                elif 'nano' in model_info or 'orin' in model_info:
+                    return 'orin_nano'
+        except Exception:
+            pass
+    return None
+
 def has_nvidia_gpu():
     """
     Check if NVIDIA GPU is available using system commands.
@@ -80,7 +98,7 @@ def detect_device():
     Automatically detects the hardware device and returns appropriate configuration.
     Returns:
         dict: Device configuration including:
-            - type: str (cpu, orin_nano, a100, etc.)
+            - type: str (cpu, orin_nano, agx_orin, gpu, etc.)
             - capabilities: dict of device capabilities
             - requirements: list of required packages
     """
@@ -105,8 +123,19 @@ def detect_device():
             else:
                 device_info['requirements'].append('torch')  # CPU version if CUDA version unknown
 
-            if "orin" in gpu_info['name'] or "nano" in gpu_info['name'] or is_jetson_device():
-                device_info['type'] = 'orin_nano'
+            # Check for Jetson devices
+            if is_jetson_device():
+                jetson_model = get_jetson_model()
+                if jetson_model:
+                    device_info['type'] = jetson_model
+                    device_info['capabilities']['tensorrt_supported'] = True
+                    device_info['requirements'].extend(['tensorrt', 'cuda-python'])
+            # Check GPU name for Jetson devices (fallback)
+            elif "orin" in gpu_info['name'].lower():
+                if "agx" in gpu_info['name'].lower():
+                    device_info['type'] = 'agx_orin'
+                else:
+                    device_info['type'] = 'orin_nano'
                 device_info['capabilities']['tensorrt_supported'] = True
                 device_info['requirements'].extend(['tensorrt', 'cuda-python'])
             else:

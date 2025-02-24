@@ -1,6 +1,6 @@
 from exla.utils.device_detect import detect_device
 from .clip_cpu import Clip_CPU
-from .clip_orin_nano import Clip_Orin_Nano
+from .clip_jetson import Clip_Jetson
 from .clip_gpu import Clip_GPU
 
 
@@ -13,7 +13,8 @@ def clip():
     device_type = device_info['type']
     
     model_map = {
-        "orin_nano": Clip_Orin_Nano,
+        "orin_nano": Clip_Jetson,
+        "agx_orin": Clip_Jetson,
         "gpu": Clip_GPU, 
         "cpu": Clip_CPU,
     }
