@@ -1,75 +1,147 @@
 from ._base import Clip_Base
 import os
 import subprocess
+from PIL import Image
+import time
+import sys
+import threading
+import itertools
+import json
+import tempfile
+from pathlib import Path
+
+class ProgressIndicator:
+    """
+    A simple spinner progress indicator with timing information.
+    """
+    def __init__(self, message):
+        self.message = message
+        self.start_time = time.time()
+        self._spinner_cycle = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+        self._stop_event = threading.Event()
+        self._thread = None
+        
+    def _get_elapsed(self):
+        return f"{time.time() - self.start_time:.1f}s"
+        
+    def _animate(self):
+        while not self._stop_event.is_set():
+            spinner = next(self._spinner_cycle)
+            sys.stdout.write("\r" + " " * 100)  # Clear line
+            sys.stdout.write(f"\r{spinner} [{self._get_elapsed()}] {self.message}")
+            sys.stdout.flush()
+            time.sleep(0.1)
+    
+    def start(self):
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._animate)
+        self._thread.daemon = True
+        self._thread.start()
+        return self
+        
+    def stop(self, success=True, final_message=None):
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join()
+        
+        symbol = "✓" if success else "✗"
+        message = final_message or self.message
+        elapsed = self._get_elapsed()
+        
+        sys.stdout.write("\r" + " " * 100)  # Clear line
+        sys.stdout.write(f"\r{symbol} [{elapsed}] {message}\n")
+        sys.stdout.flush()
+        
+        return elapsed
+        
+    def __enter__(self):
+        self.start()
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        success = exc_type is None
+        self.stop(success=success)
 
 class Clip_Jetson(Clip_Base):
-    def __init__(self, model_name="openai/clip-vit-large-patch14-336", container_tag="36.3.0"):
+    def __init__(self, model_name="openai/clip-vit-large-patch14-336"):
         """
-        Initializes CLIP model on Orin Nano using the clip_trt container.
+        Initializes CLIP model on Jetson using the clip_trt package directly.
         
         Args:
             model_name (str): Name of the CLIP model to use (from HuggingFace)
-            container_tag (str): Version tag for the clip_trt container. Defaults to 36.3.0
         """
         self.model_name = model_name
-        self.container_tag = container_tag
-        self._setup_container()
-        self.install_dependencies()
+        
+        # Create cache directory for model downloads
+        self.cache_dir = Path.home() / ".cache" / "exla" / "clip_trt"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Install dependencies
+        self._install_dependencies()
+        
+        # Initialize model
+        self.model = None
 
-    def install_dependencies(self):
-        """
-        Installs the dependencies for the CLIP model on Orin Nano.
-        """
-        subprocess.run([
-            "uv", "pip", "install", "-r", "requirements/requirements_jetson.txt"
-        ], check=True)
-
-    def _setup_container(self):
-        """
-        Ensures the clip_trt container is available through jetson-containers.
-        """
-        try:
-            # First check if jetson-containers is installed
-            print("Checking for jetson-containers...")
-            if not os.path.exists("/usr/local/bin/jetson-containers"):
-                print("Installing jetson-containers...")
-                # Clone the repository
+    def _install_dependencies(self):
+        """Install required dependencies for clip_trt"""
+        with ProgressIndicator("Installing clip_trt dependencies") as progress:
+            try:
+                # First check if clip_trt is already installed
+                try:
+                    import clip_trt
+                    progress.stop(final_message="clip_trt already installed")
+                    return
+                except ImportError:
+                    pass
+                
+                # Install required dependencies first
                 subprocess.run([
-                    "sudo", "git", "clone", "https://github.com/dusty-nv/jetson-containers.git",
-                    "/tmp/jetson-containers"
+                   "uv", "pip", "install", "pillow", "torch", "transformers", "psutil"
                 ], check=True)
                 
-                # Run the install script from the cloned repo with sudo
+                # Install torch2trt first (required by clip_trt)
                 subprocess.run([
-                    "sudo", "bash", "-c", "cd /tmp/jetson-containers && bash install.sh"
+                    "uv", "pip", "install", "git+https://github.com/NVIDIA-AI-IOT/torch2trt.git"
                 ], check=True)
+                
+                # Set environment variables to ensure dependencies are available during installation
+                env = os.environ.copy()
+                env["PYTHONPATH"] = os.path.dirname(os.path.dirname(sys.executable)) + ":" + env.get("PYTHONPATH", "")
+                
+                # Install from GitHub if not installed
+                subprocess.run([
+                    "uv", "pip", "install", "--no-deps", "git+https://github.com/dusty-nv/clip_trt.git"
+                ], env=env, check=True)
+                
+                progress.stop(final_message="Successfully installed clip_trt")
+            except Exception as e:
+                progress.stop(success=False, final_message=f"Failed to install dependencies: {e}")
+                raise
 
-            # Use jetson-containers to run clip_trt with sudo
-            print(f"Setting up clip_trt:{self.container_tag} container...")
-            subprocess.run([
-                "sudo", "jetson-containers", "run",
-                f"clip_trt:{self.container_tag}",
-                "echo", "Container setup complete"
-            ], check=True)
+    def _load_model(self):
+        """Load the CLIP model using clip_trt"""
+        if self.model is not None:
+            return
             
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Failed to setup clip_trt container using jetson-containers: {e}\n"
-                "Please manually install jetson-containers with sudo:\n"
-                "sudo git clone https://github.com/dusty-nv/jetson-containers.git\n"
-                "cd jetson-containers\n"
-                "sudo bash install.sh"
-            )
-        except Exception as e:
-            raise RuntimeError(f"Unexpected error during container setup: {str(e)}")
+        with ProgressIndicator(f"Loading CLIP model: {self.model_name}") as progress:
+            try:
+                from clip_trt import CLIPModel
+                
+                # Load the model with TensorRT optimization
+                self.model = CLIPModel.from_pretrained(
+                    self.model_name,
+                    use_tensorrt=True,
+                    crop=False,
+                )
+                progress.stop(final_message="Model loaded successfully")
+            except Exception as e:
+                progress.stop(success=False, final_message=f"Failed to load model: {e}")
+                raise
 
     def _load_images(self, image_input):
         """
-        Loads images from paths and returns PIL Image objects.
+        Loads images from paths and returns valid paths and PIL images.
         """
-        from PIL import Image
-        import time
-        
         image_paths = []
         if isinstance(image_input, str):
             if image_input.endswith(".txt"):
@@ -80,75 +152,112 @@ class Clip_Jetson(Clip_Base):
         elif isinstance(image_input, list):
             image_paths = image_input
 
-        images = []
         valid_paths = []
+        pil_images = []
+        
         for path in image_paths:
             if os.path.exists(path):
                 try:
+                    # Load the image
                     img = Image.open(path).convert("RGB")
-                    images.append(img)
+                    pil_images.append(img)
                     valid_paths.append(path)
                 except Exception as e:
                     print(f"Error loading image {path}: {e}")
-        return images, valid_paths
+        
+        return valid_paths, pil_images
 
-    def inference(self, image_paths, classes=[]):
+    def inference(self, image_paths, text_queries=[], timeout=300, debug=False):
         """
-        Runs CLIP inference using the clip_trt container via jetson-containers.
+        Runs CLIP inference using the clip_trt package directly.
         
         Args:
             image_paths: String or list of image paths
-            classes: List of text classes to compare against
+            text_queries: List of text queries to compare against
+            timeout: Maximum time in seconds to wait for inference
+            debug: Whether to print detailed debug information
             
         Returns:
-            List of dictionaries containing predictions for each image
+            List of dictionaries containing predictions for each text query
         """
-        import shutil
+        print("\n🚀 Starting Exla CLIP Inference Pipeline\n")
         
-        images, valid_paths = self._load_images(image_paths)
-        if not images:
-            return {"error": "No valid images found"}
-
-        # Create a temporary directory for image processing
-        tmp_dir = "/tmp/clip_trt_input"
-        os.makedirs(tmp_dir, exist_ok=True)
+        # Track overall execution time
+        total_start_time = time.time()
+        timings = {}
         
-        # Save images with their original names
-        temp_paths = []
-        for i, (img, orig_path) in enumerate(zip(images, valid_paths)):
-            temp_path = os.path.join(tmp_dir, os.path.basename(orig_path))
-            img.save(temp_path)
-            temp_paths.append(temp_path)
-
+        # Process images
+        with ProgressIndicator("Loading and preprocessing images") as progress:
+            valid_paths, pil_images = self._load_images(image_paths)
+            if not valid_paths:
+                progress.stop(success=False, final_message="No valid images found")
+                return {"error": "No valid images found"}
+            timings["image_processing"] = progress.stop(final_message=f"Processed {len(valid_paths)} images")
+        
         try:
-            # Run inference using jetson-containers with sudo
-            cmd = [
-                "sudo", "jetson-containers", "run",
-                "-v", f"{tmp_dir}:/workspace/images",
-                f"clip_trt:{self.container_tag}",
-                "python3", "-m", "clip_trt",
-                "--model", self.model_name,
-                "--use_tensorrt", "True",
-                "--inputs"
-            ] + [f"/workspace/images/{os.path.basename(p)}" for p in valid_paths] + ["--inputs"] + classes
-
-            output = subprocess.check_output(cmd, text=True)
+            # Load the model if not already loaded
+            model_load_start = time.time()
+            self._load_model()
+            timings["model_loading"] = f"{time.time() - model_load_start:.1f}s"
             
-            # Parse results
-            predictions = []
-            for line in output.strip().split("\n"):
-                if "similarity scores:" in line.lower():
-                    scores = [float(x) for x in line.split(":")[1].strip().split()]
-                    best_idx = max(range(len(scores)), key=scores.__getitem__)
-                    predictions.append({
-                        "best_class": classes[best_idx],
-                        "probability": scores[best_idx]
-                    })
+            # Run inference
+            with ProgressIndicator("Running CLIP inference") as progress:
+                inference_start = time.time()
+                
+                # Get similarity scores
+                similarity = self.model(pil_images, text_queries)
+                
+                if debug:
+                    print(f"DEBUG: Similarity shape: {similarity.shape}")
+                    print(f"DEBUG: Similarity values: {similarity}")
+                
+                timings["inference"] = progress.stop(final_message="Inference completed successfully")
             
-            return predictions
-
-        finally:
-            # Cleanup
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
+            # Process results
+            with ProgressIndicator("Processing results") as progress:
+                results = []
+                
+                # Convert similarity matrix to the expected format
+                # similarity is a 2D tensor with shape [num_texts, num_images]
+                import torch
+                similarity_np = similarity.cpu().numpy() if isinstance(similarity, torch.Tensor) else similarity
+                
+                for i, query in enumerate(text_queries):
+                    matches = []
+                    
+                    # Get scores for this text query across all images
+                    scores = similarity_np[i]
+                    
+                    # Match scores with image paths
+                    for j, (img_path, score) in enumerate(zip(valid_paths, scores)):
+                        matches.append({
+                            "image_path": img_path,
+                            "score": f"{float(score):.4f}"
+                        })
+                    
+                    # Add to results
+                    results.append({query: matches})
+                
+                timings["processing"] = progress.stop()
+            
+            # Calculate total time
+            total_time = time.time() - total_start_time
+            
+            # Print summary
+            print(f"\n✨ CLIP Inference Summary:")
+            print(f"   • Model: {self.model_name}")
+            print(f"   • Images processed: {len(valid_paths)}")
+            print(f"   • Text queries: {len(text_queries)}")
+            print(f"   • Total time: {total_time:.2f}s")
+            print("\n⏱️  Timing Breakdown:")
+            for step, duration in timings.items():
+                print(f"   • {step.replace('_', ' ').title()}: {duration}")
+            
+            return results
+            
+        except Exception as e:
+            print(f"\n❌ Error running CLIP inference: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
