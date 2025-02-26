@@ -10,4 +10,3 @@ matches = model.inference(
 )
 
 print(json.dumps(matches, indent=2))
-

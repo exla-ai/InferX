@@ -13,8 +13,8 @@ def clip():
     device_type = device_info['type']
     
     model_map = {
-        "orin_nano": Clip_Jetson,
-        "agx_orin": Clip_Jetson,
+        "orin_nano": Clip_Jetson,  # Use Jetson implementation for GPU acceleration
+        "agx_orin": Clip_Jetson,   # Use Jetson implementation for GPU acceleration
         "gpu": Clip_GPU, 
         "cpu": Clip_CPU,
     }

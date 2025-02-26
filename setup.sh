@@ -8,7 +8,7 @@ if ! command -v uv &> /dev/null; then
     echo "Installing uv package installer..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
-uv venv --python 3.12
+uv venv --python 3.10
 
 # Update pip and install packages
 echo "Installing required packages..."

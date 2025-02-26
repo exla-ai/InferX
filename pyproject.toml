@@ -3,7 +3,7 @@ name = "exla-sdk"
 version = "0.1.0"
 description = "EXLA SDK for hardware-optimized ML models"
 authors = [
-    {name = "Viraat Das", email = "virat@exla.ai"}
+    {name = "Viraat Das", email = "viraat@exla.ai"}
 ]
 dependencies = []
 
