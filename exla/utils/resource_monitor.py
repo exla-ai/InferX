@@ -1,7 +1,7 @@
 import os
 import subprocess
-import psutil
 import platform
+import sys
 from .device_detect import detect_device, is_jetson_device
 
 class ResourceMonitor:
@@ -16,6 +16,15 @@ class ResourceMonitor:
         self.device_type = self.device_info['type']
         self.is_gpu_available = self.device_info['capabilities']['gpu_available']
         self.is_jetson = is_jetson_device()
+        self.has_psutil = self._check_psutil()
+    
+    def _check_psutil(self):
+        """Check if psutil is available without trying to install it."""
+        try:
+            import psutil
+            return True
+        except ImportError:
+            return False
     
     def get_memory_usage(self, print_info=True):
         """
@@ -46,11 +55,23 @@ class ResourceMonitor:
     
     def _get_cpu_memory(self):
         """Get CPU memory usage information."""
-        vm = psutil.virtual_memory()
+        if self.has_psutil:
+            try:
+                import psutil
+                vm = psutil.virtual_memory()
+                return {
+                    'total': self._format_bytes(vm.total),
+                    'used': self._format_bytes(vm.used),
+                    'percent': vm.percent
+                }
+            except Exception:
+                pass
+                
+        # Fallback or psutil not available
         return {
-            'total': self._format_bytes(vm.total),
-            'used': self._format_bytes(vm.used),
-            'percent': vm.percent
+            'total': 'Unknown',
+            'used': 'Unknown',
+            'percent': 0
         }
     
     def _get_gpu_memory(self):
@@ -112,7 +133,8 @@ class ResourceMonitor:
             return self._get_nvidia_memory()
             
         except (subprocess.SubprocessError, FileNotFoundError, ValueError, IndexError) as e:
-            print(f"Warning: Could not get Jetson memory info: {e}")
+            if self.has_psutil:
+                print(f"Warning: Could not get Jetson memory info: {e}")
             return None
     
     def _get_nvidia_memory(self):
@@ -138,7 +160,8 @@ class ResourceMonitor:
                 'utilization': f"{gpu_util}%"
             }
         except (subprocess.SubprocessError, FileNotFoundError, ValueError, IndexError) as e:
-            print(f"Warning: Could not get NVIDIA GPU memory info: {e}")
+            if self.has_psutil:
+                print(f"Warning: Could not get NVIDIA GPU memory info: {e}")
             return None
     
     def _format_bytes(self, bytes_value):
@@ -162,7 +185,10 @@ class ResourceMonitor:
         
         # Print CPU memory
         cpu_mem = info['cpu_memory']
-        print(f"💻 System Memory: {cpu_mem['used']} / {cpu_mem['total']} ({cpu_mem['percent']}%)")
+        if cpu_mem['total'] == 'Unknown':
+            print(f"💻 System Memory: Monitoring unavailable (psutil not installed)")
+        else:
+            print(f"💻 System Memory: {cpu_mem['used']} / {cpu_mem['total']} ({cpu_mem['percent']}%)")
         
         # Print GPU memory if available
         if 'gpu_memory' in info:

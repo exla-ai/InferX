@@ -1,13 +1,12 @@
 from ._base import Clip_Base
 import os
 import subprocess
-from PIL import Image
-import time
 import sys
 import threading
 import itertools
 import json
 import tempfile
+import time
 from pathlib import Path
 from exla.utils.resource_monitor import ResourceMonitor
 
@@ -90,11 +89,11 @@ class Clip_Jetson(Clip_Base):
         self.cache_dir = Path.home() / ".cache" / "exla" / "clip_trt"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # Print initialization message
-        print(f"\n🚀 Initializing Exla Optimized CLIP model for {device_type.upper()}")
-        
-        # Install dependencies (will only do the minimum necessary)
-        self._install_dependencies(verbose=False)
+        # Print initialization message with animation
+        with ProgressIndicator(f"Initializing Exla Optimized CLIP model for {device_type.upper()} [GPU Mode]") as progress:
+            # Install dependencies (will only do the minimum necessary)
+            self._install_dependencies(verbose=False)
+            progress.stop()
         
         # Initialize model
         self.model = None
@@ -134,86 +133,85 @@ class Clip_Jetson(Clip_Base):
                 print("For best performance, use Python 3.10 with NVIDIA's PyTorch wheel")
                 print("See README for setup instructions")
             
-            # Check if PyTorch with CUDA is available
-            try:
-                import torch
+            # Get the path to the requirements file
+            current_dir = Path(__file__).parent
+            requirements_file = current_dir / "requirements" / "requirements_jetson.txt"
+            
+            if not requirements_file.exists():
                 if verbose:
-                    print(f"PyTorch version: {torch.__version__}")
+                    print(f"Requirements file not found: {requirements_file}")
+                return False
+            
+            # Check if required packages are installed
+            try:
+                from PIL import Image
+                import transformers
+                import torch
+                import psutil
                 
-                # Check if we need to install NVIDIA's PyTorch wheel
-                if (not torch.cuda.is_available() and self._is_jetson_device()) or force_nvidia_wheel:
-                    if verbose or force_nvidia_wheel:
+                # If we need to force NVIDIA wheel installation, raise ImportError
+                if force_nvidia_wheel:
+                    raise ImportError("Forcing NVIDIA PyTorch wheel installation")
+                
+                # Check if PyTorch with CUDA is available
+                if not torch.cuda.is_available() and self._is_jetson_device() and is_python_310:
+                    if verbose:
                         print("CUDA is not available on this Jetson device.")
-                        
-                    # Only attempt to install NVIDIA wheel if using Python 3.10
-                    if is_python_310:
-                        if verbose or force_nvidia_wheel:
-                            print("Installing NVIDIA's PyTorch wheel for optimal performance...")
-                        
-                        # Install NVIDIA PyTorch wheel for Python 3.10
-                        nvidia_wheel = "https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl"
-                        try:
-                            subprocess.check_call(
-                                [sys.executable, "-m", "pip", "install", nvidia_wheel, "numpy==1.26.4"],
-                                stdout=subprocess.DEVNULL if not verbose else None,
-                                stderr=subprocess.DEVNULL if not verbose else None
-                            )
-                            print("✓ NVIDIA PyTorch wheel installed successfully")
-                            
-                            # Reload torch to use the new installation
-                            import importlib
-                            importlib.reload(torch)
-                            
-                            if torch.cuda.is_available():
-                                print(f"✓ CUDA is now available with device: {torch.cuda.get_device_name(0)}")
-                            else:
-                                print("⚠️ CUDA is still not available after installing NVIDIA's PyTorch wheel")
-                                print("Please check your CUDA installation and environment variables")
-                        except Exception as e:
-                            if verbose:
-                                print(f"⚠️ Failed to install NVIDIA PyTorch wheel: {e}")
+                    
+                    # Install NVIDIA PyTorch wheel for Python 3.10
+                    if verbose:
+                        print("Installing NVIDIA's PyTorch wheel for optimal performance...")
+                    
+                    # Install from requirements file
+                    subprocess.check_call(
+                        [sys.executable, "-m", "pip", "install", "-r", str(requirements_file)],
+                        stdout=subprocess.DEVNULL if not verbose else None,
+                        stderr=subprocess.DEVNULL if not verbose else None
+                    )
+                    
+                    # Reload torch to use the new installation
+                    import importlib
+                    importlib.reload(torch)
+                    
+                    if torch.cuda.is_available():
+                        print(f"✓ CUDA is now available with device: {torch.cuda.get_device_name(0)}")
                     else:
-                        print(f"⚠️ Python {python_version} is not compatible with NVIDIA's PyTorch wheel")
-                        print("For optimal performance, consider using Python 3.10")
+                        print("⚠️ CUDA is still not available after installing NVIDIA's PyTorch wheel")
+                        print("Please check your CUDA installation and environment variables")
+                else:
+                    if verbose:
+                        print("All required packages are already installed")
+                    return True
             except ImportError:
                 if verbose:
-                    print("PyTorch not found. Installing...")
-                # Install PyTorch
+                    print(f"Installing dependencies from {requirements_file}")
+                
+                # Install from requirements file
                 subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", "torch"],
+                    [sys.executable, "-m", "pip", "install", "-r", str(requirements_file)],
                     stdout=subprocess.DEVNULL if not verbose else None,
                     stderr=subprocess.DEVNULL if not verbose else None
                 )
-            
-            # Install required packages
-            try:
-                # Install different packages based on Python version
-                if is_python_310:
-                    # For Python 3.10, install with specific NumPy version
-                    subprocess.check_call(
-                        [sys.executable, "-m", "pip", "install", "pillow", "transformers", "psutil", "numpy==1.26.4"],
-                        stdout=subprocess.DEVNULL if not verbose else None,
-                        stderr=subprocess.DEVNULL if not verbose else None
-                    )
-                else:
-                    # For other Python versions, install without specific NumPy version
-                    subprocess.check_call(
-                        [sys.executable, "-m", "pip", "install", "pillow", "transformers", "psutil"],
-                        stdout=subprocess.DEVNULL if not verbose else None,
-                        stderr=subprocess.DEVNULL if not verbose else None
-                    )
-            except Exception as e:
+                
                 if verbose:
-                    print(f"Warning: Failed to install some dependencies: {str(e)}")
-                    print("The model will still work, but may have reduced functionality.")
-                return False
+                    print("✓ Dependencies installed successfully")
+                
+                # Check if CUDA is available after installation
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        print(f"✓ CUDA is now available with device: {torch.cuda.get_device_name(0)}")
+                    elif self._is_jetson_device() and is_python_310:
+                        print("⚠️ CUDA is still not available after installing NVIDIA's PyTorch wheel")
+                        print("Please check your CUDA installation and environment variables")
+                except ImportError:
+                    if verbose:
+                        print("⚠️ Failed to import PyTorch after installation")
             
-            if verbose:
-                print("✓ Dependencies installed successfully")
             return True
         except Exception as e:
             if verbose:
-                print(f"Warning: Failed to install some dependencies: {str(e)}")
+                print(f"Warning: Failed to install dependencies: {str(e)}")
                 print("The model will still work, but may have reduced functionality.")
             return False
 
@@ -344,6 +342,9 @@ class Clip_Jetson(Clip_Base):
         """
         Loads images from paths and returns valid paths and PIL images.
         """
+        # Import PIL here to avoid import at module level
+        from PIL import Image
+        
         image_paths = []
         if isinstance(image_input, str):
             if image_input.endswith(".txt"):
