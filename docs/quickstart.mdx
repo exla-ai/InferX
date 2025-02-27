@@ -1,0 +1,154 @@
+---
+title: 'Quickstart'
+description: 'Get started with Exla SDK in minutes'
+---
+
+# Quickstart Guide
+
+This guide will help you get started with the Exla SDK quickly. We'll walk through installation and run a simple example using the CLIP model.
+
+## Installation
+
+Install the Exla SDK using pip:
+
+```bash
+pip install exla-sdk
+```
+
+For Jetson devices, we recommend using Python 3.10 for optimal performance:
+
+```bash
+# Create a Python 3.10 virtual environment
+python3.10 -m venv exla-env
+source exla-env/bin/activate
+
+# Install Exla SDK
+pip install exla-sdk
+```
+
+## Running Your First Model
+
+Let's run a simple example using the CLIP model, which can match images with text descriptions.
+
+### 1. Prepare Your Images
+
+Save some test images to work with. For this example, we'll use two images:
+
+```bash
+# Create a data directory
+mkdir -p data
+
+# Download sample images
+wget -O data/dog.jpg https://images.unsplash.com/photo-1543466835-00a7907e9de1
+wget -O data/cat.jpg https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba
+```
+
+### 2. Create a Simple Script
+
+Create a file named `clip_example.py` with the following content:
+
+```python
+from exla.models.clip import clip
+import json
+
+# Initialize the model (automatically detects your hardware)
+model = clip()
+
+# Run inference
+results = model.inference(
+    image_paths=["data/dog.jpg", "data/cat.jpg"],
+    text_queries=["a photo of a dog", "a photo of a cat", "a photo of a bird"]
+)
+
+# Print results
+print(json.dumps(results, indent=2))
+```
+
+### 3. Run the Script
+
+```bash
+python clip_example.py
+```
+
+You'll see real-time progress with animated spinners as the model loads and runs inference:
+
+```
+✨ EXLA SDK - CLIP Model ✨
+🔍 Device Detected: AGX_ORIN
+
+📊 Initial System Resources:
+📊 Resource Monitor - NVIDIA Jetson AGX Orin
+💻 System Memory: 4.2GB / 15.6GB (27%)
+
+⠏ [0.5s] Initializing Exla Optimized CLIP model for AGX_ORIN [GPU Mode]
+✓ [0.6s] Initializing Exla Optimized CLIP model for AGX_ORIN [GPU Mode]
+
+🚀 Running CLIP inference on your images
+✓ [0.2s] Processed 2 images
+⠋ [1.2s] Loading CLIP model
+Using GPU: Orin
+✓ [4.1s] Model ready on CUDA
+⠋ [0.0s] Running CLIP inference
+✓ [0.8s] Inference completed successfully
+✓ [0.1s] Processing results
+
+✨ CLIP Inference Summary:
+   • Model: openai/clip-vit-large-patch14-336
+   • Device: CUDA
+   • Images processed: 2
+   • Text queries: 3
+   • Total time: 5.17s
+```
+
+### 4. Understand the Results
+
+The output will be a JSON structure showing how well each image matches each text query:
+
+```json
+[
+  {
+    "a photo of a dog": [
+      {
+        "image_path": "data/dog.jpg",
+        "score": "23.1011"
+      },
+      {
+        "image_path": "data/cat.jpg",
+        "score": "17.1396"
+      }
+    ]
+  },
+  {
+    "a photo of a cat": [
+      {
+        "image_path": "data/cat.jpg",
+        "score": "25.3045"
+      },
+      {
+        "image_path": "data/dog.jpg",
+        "score": "18.7532"
+      }
+    ]
+  },
+  {
+    "a photo of a bird": [
+      {
+        "image_path": "data/dog.jpg",
+        "score": "15.9280"
+      },
+      {
+        "image_path": "data/cat.jpg",
+        "score": "15.9280"
+      }
+    ]
+  }
+]
+```
+
+Higher scores indicate better matches between the image and text.
+
+## Next Steps
+
+- Explore the [CLIP model documentation](/models/clip) for advanced usage
+- Try other models in the Exla SDK
+- Check out the [compatibility guide](/compatibility) for hardware-specific optimizations 
