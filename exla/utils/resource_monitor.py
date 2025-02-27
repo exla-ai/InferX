@@ -2,6 +2,8 @@ import os
 import subprocess
 import platform
 import sys
+import time
+import threading
 from .device_detect import detect_device, is_jetson_device
 
 class ResourceMonitor:
@@ -17,6 +19,73 @@ class ResourceMonitor:
         self.is_gpu_available = self.device_info['capabilities']['gpu_available']
         self.is_jetson = is_jetson_device()
         self.has_psutil = self._check_psutil()
+        
+        # For continuous monitoring
+        self._monitoring = False
+        self._monitor_thread = None
+        self._peak_memory_mb = 0
+        self._start_time = None
+        self._end_time = None
+    
+    def start(self):
+        """Start monitoring resources."""
+        self._monitoring = True
+        self._peak_memory_mb = 0
+        self._start_time = time.time()
+        
+        # Start monitoring in a separate thread
+        self._monitor_thread = threading.Thread(target=self._monitor_resources)
+        self._monitor_thread.daemon = True
+        self._monitor_thread.start()
+        
+        return self
+    
+    def stop(self):
+        """Stop monitoring resources."""
+        if self._monitoring:
+            self._monitoring = False
+            self._end_time = time.time()
+            if self._monitor_thread:
+                self._monitor_thread.join(timeout=1.0)
+        return self
+    
+    def get_stats(self):
+        """Get the statistics collected during monitoring."""
+        if self._start_time is None:
+            return {"peak_memory_mb": 0, "inference_time_s": 0}
+            
+        inference_time = 0
+        if self._end_time:
+            inference_time = self._end_time - self._start_time
+        else:
+            inference_time = time.time() - self._start_time
+            
+        return {
+            "peak_memory_mb": self._peak_memory_mb,
+            "inference_time_s": round(inference_time, 3)
+        }
+    
+    def _monitor_resources(self):
+        """Monitor resources in a loop until stopped."""
+        try:
+            while self._monitoring:
+                # Get current memory usage
+                memory_info = self.get_memory_usage(print_info=False)
+                
+                # Update peak memory (in MB)
+                if self.has_psutil:
+                    try:
+                        import psutil
+                        process = psutil.Process(os.getpid())
+                        memory_mb = process.memory_info().rss / (1024 * 1024)
+                        self._peak_memory_mb = max(self._peak_memory_mb, memory_mb)
+                    except:
+                        pass
+                
+                # Sleep for a short time
+                time.sleep(0.1)
+        except Exception as e:
+            print(f"Warning: Error in resource monitoring: {e}")
     
     def _check_psutil(self):
         """Check if psutil is available without trying to install it."""
