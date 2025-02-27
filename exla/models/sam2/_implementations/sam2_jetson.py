@@ -71,6 +71,10 @@ class ProgressIndicator:
         self.stop(success=success)
 
 class SAM2_Jetson(SAM2_Base):
+    """
+    SAM2 implementation optimized for NVIDIA Jetson platforms using TensorRT.
+    Supports both local model inference and server-based inference.
+    """
     def __init__(self, model_name="sam2_b", server_url="http://localhost:8000/predict"):
         """
         Initializes SAM2 model on Jetson with TensorRT optimizations.
@@ -80,13 +84,29 @@ class SAM2_Jetson(SAM2_Base):
             server_url (str): URL of the SAM2 prediction server
         """
         super().__init__()
-        self.model_name = model_name
+        # Convert model name format if needed (SAM2 uses different naming convention)
+        # SAM2 models are named: "sam2_b", "sam2_l", "sam2_h" (base, large, huge)
+        if model_name == "sam2_b":
+            self.model_name = "sam2_b"
+            self.checkpoint_name = "sam2_b.pth"
+        elif model_name == "sam2_l":
+            self.model_name = "sam2_l"
+            self.checkpoint_name = "sam2_l.pth"
+        elif model_name == "sam2_h":
+            self.model_name = "sam2_h"
+            self.checkpoint_name = "sam2_h.pth"
+        else:
+            # Default to base model
+            self.model_name = "sam2_b"
+            self.checkpoint_name = "sam2_b.pth"
+            print(f"Warning: Unknown model name '{model_name}', defaulting to 'sam2_b'")
+            
         self.server_url = server_url
         self.model = None
         self.predictor = None
+        self.sam = None
         
         # Create cache directory for model downloads
-        # Use a directory in the user's home folder instead of /tmp which might have permission issues
         self.cache_dir = Path.home() / ".cache" / "exla" / "sam2"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
@@ -96,10 +116,10 @@ class SAM2_Jetson(SAM2_Base):
             # Try to connect to server
             response = requests.get(self.server_url.replace("/predict", ""), timeout=1)
             print(f"✓ Connected to SAM2 server at {self.server_url}")
-        except:
+        except Exception as e:
             # If server not available, use local model
             self.use_server = False
-            print("Server not available, using local model")
+            print(f"Server not available ({str(e)}), using local model")
             self._install_dependencies()
             self._load_model()
         
@@ -118,7 +138,12 @@ class SAM2_Jetson(SAM2_Base):
                 
                 # Install required dependencies
                 subprocess.run([
-                    "uv", "pip", "install", "torch", "torchvision", "opencv-python", "matplotlib", "segment-anything"
+                    "uv", "pip", "install", "torch", "torchvision", "opencv-python", "matplotlib"
+                ], check=True)
+                
+                # Install SAM2 dependencies
+                subprocess.run([
+                    "uv", "pip", "install", "git+https://github.com/facebookresearch/segment-anything-2.git"
                 ], check=True)
                 
                 # Install TensorRT dependencies
@@ -139,18 +164,26 @@ class SAM2_Jetson(SAM2_Base):
     def _load_model(self):
         """Load the SAM2 model with TensorRT optimizations"""
         try:
-            from segment_anything import sam_model_registry, SamPredictor
+            # Import the actual SAM2 model
+            try:
+                from segment_anything_2 import sam2_model_registry, Sam2Predictor
+            except ImportError:
+                print("Could not import segment_anything_2. Installing...")
+                subprocess.run([
+                    "uv", "pip", "install", "git+https://github.com/facebookresearch/segment-anything-2.git"
+                ], check=True)
+                from segment_anything_2 import sam2_model_registry, Sam2Predictor
             
             # Check if model exists in cache
-            checkpoint_path = self.cache_dir / f"{self.model_name}.pth"
+            checkpoint_path = self.cache_dir / f"{self.checkpoint_name}"
             
             if not checkpoint_path.exists():
                 print(f"⚠️ Model not found at {checkpoint_path}.")
-                print(f"Please download the SAM2 model file ({self.model_name}.pth) and place it in {self.cache_dir}")
-                print("You can download the model from: https://github.com/facebookresearch/segment-anything/tree/main#model-checkpoints")
+                print(f"Please download the SAM2 model file ({self.checkpoint_name}) and place it in {self.cache_dir}")
+                print("You can download the model from: https://github.com/facebookresearch/segment-anything-2#model-checkpoints")
                 
                 # Create a fallback path to check in the Docker mount location
-                docker_path = Path("/tmp/nv_jetson_model/sam2") / f"{self.model_name}.pth"
+                docker_path = Path("/tmp/nv_jetson_model/sam2") / f"{self.checkpoint_name}"
                 if docker_path.exists():
                     print(f"✓ Found model at Docker mount path: {docker_path}")
                     checkpoint_path = docker_path
@@ -159,11 +192,14 @@ class SAM2_Jetson(SAM2_Base):
             
             # Load model
             print(f"Loading SAM2 model from: {checkpoint_path}")
-            sam = sam_model_registry[self.model_name](checkpoint=str(checkpoint_path))
-            sam.to(device="cuda")
+            # SAM2 model registry uses different keys than the original SAM
+            # Convert model name to registry key if needed
+            model_registry_key = self.model_name.replace("sam2_", "")  # Convert "sam2_b" to "b"
+            self.sam = sam2_model_registry[model_registry_key](checkpoint=str(checkpoint_path))
+            self.sam.to(device="cuda")
             
             # Create predictor
-            self.predictor = SamPredictor(sam)
+            self.predictor = Sam2Predictor(self.sam)
             print(f"✓ Loaded SAM2 model: {self.model_name}")
             
         except Exception as e:
@@ -171,7 +207,15 @@ class SAM2_Jetson(SAM2_Base):
             raise
     
     def show_mask(self, mask, ax, random_color=False, borders=True):
-        """Display a mask on a matplotlib axis."""
+        """
+        Display a mask on a matplotlib axis.
+        
+        Args:
+            mask: Binary mask to display
+            ax: Matplotlib axis to display on
+            random_color: Whether to use a random color
+            borders: Whether to draw borders around the mask
+        """
         if random_color:
             color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
         else:
@@ -198,7 +242,15 @@ class SAM2_Jetson(SAM2_Base):
         ax.imshow(mask_image)
     
     def show_points(self, coords, labels, ax, marker_size=375):
-        """Display points on a matplotlib axis."""
+        """
+        Display points on a matplotlib axis.
+        
+        Args:
+            coords: Point coordinates
+            labels: Point labels (1=foreground, 0=background)
+            ax: Matplotlib axis to display on
+            marker_size: Size of the markers
+        """
         pos_points = coords[labels == 1]
         neg_points = coords[labels == 0]
         ax.scatter(
@@ -217,7 +269,16 @@ class SAM2_Jetson(SAM2_Base):
         )
     
     def resize_mask(self, mask, target_size):
-        """Resize a binary mask to the target size."""
+        """
+        Resize a binary mask to the target size.
+        
+        Args:
+            mask: Binary mask to resize
+            target_size: Target size (width, height)
+            
+        Returns:
+            Resized binary mask
+        """
         mask_pil = Image.fromarray(mask.astype(np.uint8) * 255)
         mask_pil = mask_pil.resize(target_size, Image.NEAREST)
         return np.array(mask_pil) > 127
@@ -364,58 +425,6 @@ class SAM2_Jetson(SAM2_Base):
             if self.use_server:
                 # Use server for inference
                 masks, scores, point_coords, point_labels = self.predict_masks_from_server(input_path)
-                
-                # Create visualizations if output path is provided
-                if output_path:
-                    # Load image for visualization
-                    image = Image.open(input_path).convert("RGB")
-                    
-                    # Determine if output_path is a directory
-                    if os.path.isdir(output_path) or not os.path.splitext(output_path)[1]:
-                        # It's a directory
-                        output_dir = output_path
-                        prefix = "Torch-TRT"
-                    else:
-                        # It's a file, extract directory and use filename as prefix
-                        output_dir = os.path.dirname(output_path)
-                        if not output_dir:
-                            output_dir = "."
-                        prefix = os.path.splitext(os.path.basename(output_path))[0]
-                    
-                    # Generate visualizations
-                    self.visualize_masks(
-                        image=image,
-                        masks=masks,
-                        scores=scores,
-                        point_coords=point_coords,
-                        point_labels=point_labels,
-                        output_dir=output_dir,
-                        prefix=prefix
-                    )
-                    
-                    # Also create a simple overlay for backward compatibility
-                    if not os.path.isdir(output_path):
-                        image_np = np.array(image)
-                        mask_overlay = np.zeros_like(image_np)
-                        for i, mask in enumerate(masks):
-                            color = np.random.randint(0, 255, size=3)
-                            mask_overlay[mask] = color
-                        
-                        # Blend with original image
-                        result = cv2.addWeighted(image_np, 0.7, mask_overlay, 0.3, 0)
-                        
-                        # Save output
-                        cv2.imwrite(output_path, cv2.cvtColor(result, cv2.COLOR_RGB2BGR))
-                
-                # Convert masks to list for JSON serialization
-                masks_list = masks.tolist() if isinstance(masks, np.ndarray) else masks
-                scores_list = scores.tolist() if isinstance(scores, np.ndarray) else scores
-                
-                return {
-                    "status": "success",
-                    "masks": masks_list,
-                    "scores": scores_list
-                }
             else:
                 # Use local model for inference
                 # Load and preprocess image
@@ -426,6 +435,9 @@ class SAM2_Jetson(SAM2_Base):
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
                 # Set image in predictor
+                if self.predictor is None:
+                    raise ValueError("SAM2 predictor is not available. Please download the model files.")
+                    
                 self.predictor.set_image(image)
                 
                 # Process based on prompt type
@@ -464,54 +476,70 @@ class SAM2_Jetson(SAM2_Base):
                         point_labels = None
                     else:
                         raise ValueError("Invalid prompt format. Must contain 'points' or 'box'.")
+            
+            # Create visualizations if output path is provided
+            if output_path:
+                # Determine if output_path is a directory
+                if os.path.isdir(output_path) or not os.path.splitext(output_path)[1]:
+                    # It's a directory
+                    output_dir = output_path
+                    prefix = "Torch-TRT"
+                else:
+                    # It's a file, extract directory and use filename as prefix
+                    output_dir = os.path.dirname(output_path)
+                    if not output_dir:
+                        output_dir = "."
+                    prefix = os.path.splitext(os.path.basename(output_path))[0]
                 
-                # Create visualizations if output path is provided
-                if output_path:
-                    # Determine if output_path is a directory
-                    if os.path.isdir(output_path) or not os.path.splitext(output_path)[1]:
-                        # It's a directory
-                        output_dir = output_path
-                        prefix = "Torch-TRT"
+                # Load image for visualization if using server mode
+                if self.use_server:
+                    image = Image.open(input_path).convert("RGB")
+                
+                # Generate visualizations
+                self.visualize_masks(
+                    image=image,
+                    masks=masks,
+                    scores=scores,
+                    point_coords=point_coords,
+                    point_labels=point_labels,
+                    output_dir=output_dir,
+                    prefix=prefix
+                )
+                
+                # Also create a simple overlay for backward compatibility
+                if not os.path.isdir(output_path):
+                    if self.use_server:
+                        image_np = np.array(image)
                     else:
-                        # It's a file, extract directory and use filename as prefix
-                        output_dir = os.path.dirname(output_path)
-                        if not output_dir:
-                            output_dir = "."
-                        prefix = os.path.splitext(os.path.basename(output_path))[0]
-                    
-                    # Generate visualizations
-                    self.visualize_masks(
-                        image=image,
-                        masks=masks,
-                        scores=scores,
-                        point_coords=point_coords,
-                        point_labels=point_labels,
-                        output_dir=output_dir,
-                        prefix=prefix
-                    )
-                    
-                    # Also create a simple overlay for backward compatibility
-                    if not os.path.isdir(output_path):
-                        mask_overlay = np.zeros_like(image)
-                        for i, mask in enumerate(masks):
-                            color = np.random.randint(0, 255, size=3)
-                            mask_overlay[mask] = color
+                        image_np = image
                         
-                        # Blend with original image
-                        result = cv2.addWeighted(image, 0.7, mask_overlay, 0.3, 0)
-                        
-                        # Save output
-                        cv2.imwrite(output_path, cv2.cvtColor(result, cv2.COLOR_RGB2BGR))
-                
-                # Convert masks to list for JSON serialization
-                masks_list = masks.tolist() if isinstance(masks, np.ndarray) else masks
-                scores_list = scores.tolist() if isinstance(scores, np.ndarray) else scores
-                
-                return {
-                    "status": "success",
-                    "masks": masks_list,
-                    "scores": scores_list
-                }
+                    # Ensure masks are properly sized for the image
+                    h, w = image_np.shape[:2]
+                    mask_overlay = np.zeros_like(image_np)
+                    
+                    for i, mask in enumerate(masks):
+                        # Resize mask if needed
+                        if mask.shape[0] != h or mask.shape[1] != w:
+                            mask = self.resize_mask(mask, (w, h))
+                            
+                        color = np.random.randint(0, 255, size=3)
+                        mask_overlay[mask] = color
+                    
+                    # Blend with original image
+                    result = cv2.addWeighted(image_np, 0.7, mask_overlay, 0.3, 0)
+                    
+                    # Save output
+                    cv2.imwrite(output_path, cv2.cvtColor(result, cv2.COLOR_RGB2BGR))
+            
+            # Convert masks to list for JSON serialization
+            masks_list = masks.tolist() if isinstance(masks, np.ndarray) else masks
+            scores_list = scores.tolist() if isinstance(scores, np.ndarray) else scores
+            
+            return {
+                "status": "success",
+                "masks": masks_list,
+                "scores": scores_list
+            }
                 
         except Exception as e:
             print(f"❌ Error during inference: {str(e)}")
@@ -525,11 +553,195 @@ class SAM2_Jetson(SAM2_Base):
         Run inference with the SAM2 model.
         
         Args:
-            input (str): Path to input image
+            input (str): Path to input image or camera index/URL
             output (str, optional): Path to save the output
             prompt (dict, optional): Prompt for the model (points, boxes, etc.)
             
         Returns:
             dict: Results from the segmentation
         """
-        return self.inference_image(input, output, prompt) 
+        # Check if input is a camera stream
+        if isinstance(input, (int, str)) and (isinstance(input, int) or input.startswith(('rtsp://', 'http://', 'https://', '/dev/'))):
+            return self.inference_camera(input, output, prompt)
+        else:
+            return self.inference_image(input, output, prompt)
+            
+    def get_model(self):
+        """
+        Get direct access to the underlying SAM2 model.
+        
+        Returns:
+            The SAM2 model object for direct manipulation
+        """
+        if self.use_server:
+            raise RuntimeError("Direct model access is not available when using server mode. Please initialize with use_server=False.")
+        
+        if self.sam is None:
+            raise RuntimeError("Model not loaded. Please ensure the model is loaded before accessing it.")
+            
+        return self.sam
+        
+    def get_predictor(self):
+        """
+        Get direct access to the SAM2 predictor.
+        
+        Returns:
+            The SAM2 predictor object for direct manipulation
+        """
+        if self.use_server:
+            raise RuntimeError("Direct predictor access is not available when using server mode. Please initialize with use_server=False.")
+        
+        if self.predictor is None:
+            raise RuntimeError("Predictor not loaded. Please ensure the model is loaded before accessing it.")
+            
+        return self.predictor
+        
+    def inference_camera(self, camera_source, output=None, prompt=None, max_frames=None, fps=30, display=False):
+        """
+        Run inference on a camera stream.
+        
+        Args:
+            camera_source: Camera index (0, 1, etc.) or URL (rtsp://, http://, etc.)
+            output (str, optional): Path to save output video
+            prompt (dict, optional): Prompt for the model (points, boxes, etc.)
+            max_frames (int, optional): Maximum number of frames to process
+            fps (int): Frames per second for output video
+            display (bool): Whether to display the output in a window
+            
+        Returns:
+            dict: Results from the segmentation
+        """
+        if self.use_server:
+            print("⚠️ Camera stream inference is not supported in server mode. Please use local model.")
+            return {"status": "error", "error": "Camera stream inference not supported in server mode"}
+            
+        try:
+            # Open camera
+            cap = cv2.VideoCapture(camera_source)
+            if not cap.isOpened():
+                raise ValueError(f"Could not open camera source: {camera_source}")
+                
+            # Get camera properties
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            # Setup output video writer if needed
+            video_writer = None
+            if output:
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                video_writer = cv2.VideoWriter(output, fourcc, fps, (width, height))
+            
+            # Process prompt
+            if prompt is None:
+                # Default point in the center of the image
+                default_point = np.array([[width//2, height//2]])
+                default_label = np.array([1])
+                point_coords = default_point
+                point_labels = default_label
+            else:
+                if "points" in prompt:
+                    point_coords = np.array(prompt["points"])
+                    point_labels = np.array(prompt.get("labels", [1] * len(prompt["points"])))
+                elif "box" in prompt:
+                    # For box prompt, we'll use it directly in the predict call
+                    point_coords = None
+                    point_labels = None
+                else:
+                    raise ValueError("Invalid prompt format. Must contain 'points' or 'box'.")
+            
+            # Setup display window if needed
+            if display:
+                cv2.namedWindow("SAM2 Segmentation", cv2.WINDOW_NORMAL)
+            
+            frame_count = 0
+            results = []
+            
+            print("Starting camera stream inference. Press 'q' to quit.")
+            
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                    
+                # Check if we've reached max frames
+                if max_frames is not None and frame_count >= max_frames:
+                    break
+                
+                # Convert frame to RGB for SAM
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                
+                # Set image in predictor
+                self.predictor.set_image(frame_rgb)
+                
+                # Process based on prompt type
+                if prompt is None or "points" in prompt:
+                    masks, scores, logits = self.predictor.predict(
+                        point_coords=point_coords,
+                        point_labels=point_labels,
+                        multimask_output=True
+                    )
+                elif "box" in prompt:
+                    input_box = np.array(prompt["box"])
+                    masks, scores, logits = self.predictor.predict(
+                        box=input_box[None, :],
+                        multimask_output=True
+                    )
+                
+                # Create visualization
+                # Use the highest scoring mask
+                best_mask_idx = np.argmax(scores)
+                mask = masks[best_mask_idx]
+                
+                # Create mask overlay
+                mask_overlay = np.zeros_like(frame)
+                mask_overlay[mask] = [0, 114, 255]  # BGR format for OpenCV
+                
+                # Blend with original frame
+                result = cv2.addWeighted(frame, 0.7, mask_overlay, 0.3, 0)
+                
+                # Draw points if available
+                if point_coords is not None:
+                    for i, (coord, label) in enumerate(zip(point_coords, point_labels)):
+                        color = (0, 255, 0) if label == 1 else (0, 0, 255)  # Green for positive, Red for negative
+                        cv2.drawMarker(result, (int(coord[0]), int(coord[1])), color, 
+                                      markerType=cv2.MARKER_STAR, markerSize=20, thickness=2)
+                
+                # Write to output video if needed
+                if video_writer:
+                    video_writer.write(result)
+                
+                # Display if needed
+                if display:
+                    cv2.imshow("SAM2 Segmentation", result)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q'):
+                        break
+                
+                # Store results
+                results.append({
+                    "frame": frame_count,
+                    "mask": mask.tolist(),
+                    "score": float(scores[best_mask_idx])
+                })
+                
+                frame_count += 1
+            
+            # Clean up
+            cap.release()
+            if video_writer:
+                video_writer.release()
+            if display:
+                cv2.destroyAllWindows()
+            
+            return {
+                "status": "success",
+                "frames_processed": frame_count,
+                "results": results
+            }
+            
+        except Exception as e:
+            print(f"❌ Error during camera inference: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            } 
