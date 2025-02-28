@@ -245,7 +245,7 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         
         print("\n🚀 Model Optimization Summary:")
         print("   • Original model size: 671B parameters (~1.3TB in FP16)")
-        print("   • Optimized model size: ~3GB")
+        print("   • Optimized model size: ~135GB")
         print("   • Hardware-aware quantization active")
         print("   • Advanced attention mechanisms enabled")
         print("   • Dynamic KV cache optimization\n")
