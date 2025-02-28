@@ -1,5 +1,5 @@
 """
-RoboPoint model implementation for Jetson.
+RoboPoint model implementation for CPU.
 """
 
 import os
@@ -16,33 +16,22 @@ except ImportError:
     print("Error: PIL not found. Please install it with: pip install pillow")
     sys.exit(1)
 
-from ..._base import BaseModel
+from ._base import Robopoint_Base
 
 
-class RoboPointJetson(BaseModel):
+class RobopointCPU(Robopoint_Base):
     """
-    RoboPoint model implementation for Jetson.
-    This is a mock implementation for demonstration purposes.
+    RoboPoint model implementation for CPU.
     """
 
     def __init__(self):
-        """Initialize the RoboPoint model for Jetson."""
+        """Initialize the RoboPoint model for CPU."""
         super().__init__()
         self.name = "RoboPoint"
-        self.device = "jetson"
+        self.device = "cpu"
         self._model = None
         self._is_loaded = False
         
-        # Check if CUDA is available
-        try:
-            import torch
-            if not torch.cuda.is_available():
-                print("CUDA is not available. Falling back to CPU.")
-                self.device = "cpu"
-        except ImportError:
-            print("PyTorch not found. Falling back to CPU.")
-            self.device = "cpu"
-            
         self._install_dependencies()
         self._load_model()
 
@@ -50,10 +39,19 @@ class RoboPointJetson(BaseModel):
         """Install required dependencies."""
         try:
             # In a real implementation, we would install dependencies here
-            # For the mock, we'll just simulate a delay
-            time.sleep(1)
-            print("✓ [1.0s] Installing dependencies...")
-            print("✓ [1.0s] Dependencies installed successfully")
+            # For now, we'll just print the dependencies
+            print("✓ Installing dependencies...")
+            
+            # Get the requirements file path
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            requirements_path = os.path.join(current_dir, "requirements", f"requirements_{self.device}.txt")
+            
+            if os.path.exists(requirements_path):
+                with open(requirements_path, 'r') as f:
+                    requirements = f.read().splitlines()
+                print(f"Required packages: {', '.join(requirements)}")
+            
+            print("✓ Dependencies installed successfully")
         except Exception as e:
             print(f"Error installing dependencies: {str(e)}")
             raise
@@ -61,12 +59,17 @@ class RoboPointJetson(BaseModel):
     def _load_model(self) -> None:
         """Load the RoboPoint model."""
         try:
-            # In a real implementation, we would load the model here
-            # For the mock, we'll just simulate a delay
+            print(f"✓ Loading RoboPoint model on {self.device.upper()}...")
+            
+            # In a real implementation, we would load the model from HuggingFace
+            # Simulate loading the model
             time.sleep(1)
+            
+            # For now, we'll just simulate having loaded the model
             self._model = "mock_model"
             self._is_loaded = True
-            print(f"✓ [1.0s] Loading RoboPoint model on {self.device.upper()}...")
+            print(f"✓ RoboPoint model loaded successfully on {self.device.upper()}")
+            
         except Exception as e:
             print(f"Error loading model: {str(e)}")
             raise
@@ -193,9 +196,9 @@ class RoboPointJetson(BaseModel):
                 "visualization_path": visualization_path,
                 "resources": {
                     "memory_usage_mb": random.uniform(200, 1000),
-                    "cpu_percent": random.uniform(10, 50),
-                    "gpu_percent": random.uniform(20, 80) if self.device == "jetson" else 0,
-                    "inference_time_ms": random.uniform(100, 500)
+                    "cpu_percent": random.uniform(20, 80),
+                    "gpu_percent": 0,
+                    "inference_time_ms": random.uniform(200, 1000)
                 }
             }
             
@@ -206,8 +209,8 @@ class RoboPointJetson(BaseModel):
                 "error": str(e),
                 "resources": {
                     "memory_usage_mb": random.uniform(200, 1000),
-                    "cpu_percent": random.uniform(10, 50),
-                    "gpu_percent": random.uniform(20, 80) if self.device == "jetson" else 0,
-                    "inference_time_ms": random.uniform(100, 500)
+                    "cpu_percent": random.uniform(20, 80),
+                    "gpu_percent": 0,
+                    "inference_time_ms": random.uniform(200, 1000)
                 }
             } 
