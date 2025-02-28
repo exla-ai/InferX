@@ -1,4 +1,5 @@
 from exla.models.robopoint import robopoint
+import time
 
 model = robopoint()
 
@@ -8,8 +9,12 @@ model.inference(
     output="data/sink_output.png"
 )
 
-model.inference(
+
+output = model.inference(
     image_path="data/stair.jpg",
     text_instruction="Identify several places in the unoccupied space on the stair in the middle.",
     output="data/stair_output.png"
 )
+
+print(output)
+

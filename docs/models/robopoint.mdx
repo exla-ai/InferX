@@ -1,0 +1,153 @@
+---
+title: 'RoboPoint'
+description: 'Vision-language model for keypoint affordance prediction optimized for various devices'
+---
+
+# RoboPoint Model
+
+The RoboPoint model is a vision-language model that predicts keypoint affordances in images based on natural language instructions. It identifies specific points in an image that correspond to the given text instruction, making it useful for robotic applications, human-robot interaction, and visual grounding tasks.
+
+## Features
+
+- **Hardware-Optimized**: Automatically detects your hardware and uses the appropriate implementation:
+  - **Jetson Devices** (Orin Nano, AGX Orin): Optimized implementation for Jetson platforms
+  - **Standard GPUs**: GPU-accelerated implementation using Docker
+  - **CPU-only Systems**: Optimized CPU implementation
+  
+- **Natural Language Interface**: Control keypoint prediction through simple text instructions
+  
+- **Visualization**: Automatically visualizes predicted keypoints on the input image
+
+## Installation
+
+The RoboPoint model is included in the Exla SDK. No separate installation is required.
+
+```bash
+pip install exla-sdk
+```
+
+For GPU implementation, Docker is required as the model runs in a containerized environment.
+
+## Basic Usage
+
+```python
+from exla.models.robopoint import robopoint
+
+# Initialize the model (automatically detects your hardware)
+model = robopoint()
+
+# Run inference with a text instruction
+model.inference(
+    image_path="path/to/image.jpg",
+    text_instruction="Find a few spots within the vacant area on the table.",
+    output="path/to/output.png"
+)
+```
+
+## Examples
+
+### Finding Spots in a Sink
+
+```python
+from exla.models.robopoint import robopoint
+
+model = robopoint()
+
+model.inference(
+    image_path="data/sink.jpg",
+    text_instruction="Find a few spots within the vacant area on the rightmost white plate.",
+    output="data/sink_output.png"
+)
+```
+
+### Identifying Places on Stairs
+
+```python
+from exla.models.robopoint import robopoint
+
+model = robopoint()
+
+model.inference(
+    image_path="data/stair.jpg",
+    text_instruction="Identify several places in the unoccupied space on the stair in the middle.",
+    output="data/stair_output.png"
+)
+```
+
+## API Reference
+
+### `robopoint(auto_pull=True)`
+
+Factory function that returns the appropriate RoboPoint model based on the detected hardware.
+
+**Parameters:**
+- `auto_pull` (bool): Whether to automatically pull the Docker image if using GPU implementation (default: True)
+
+**Returns:**
+- A RoboPoint model instance optimized for the detected hardware
+
+### `model.inference(image_path, text_instruction=None, output=None)`
+
+Runs RoboPoint inference on the provided image with the given text instruction.
+
+**Parameters:**
+- `image_path` (str): Path to the input image
+- `text_instruction` (str, optional): Language instruction for the model (default: "Find keypoints in the image")
+- `output` (str, optional): Path to save the output visualization
+
+**Returns:**
+- Dictionary containing the status and output information
+
+## Implementation Details
+
+### GPU Implementation
+
+For systems with NVIDIA GPUs, RoboPoint uses a Docker-based implementation for optimal performance:
+
+```python
+from exla.models.robopoint import robopoint
+
+# Initialize with auto_pull=True to automatically download the Docker image
+model = robopoint(auto_pull=True)
+
+# Run inference
+model.inference(...)
+```
+
+### Jetson Implementation
+
+For Jetson devices (Orin Nano, AGX Orin), RoboPoint uses a specialized implementation optimized for the Jetson platform:
+
+```python
+from exla.models.robopoint import robopoint
+
+# The factory function automatically detects Jetson devices
+model = robopoint()
+
+# Run inference with Jetson optimizations
+model.inference(...)
+```
+
+### CPU Implementation
+
+For systems without GPUs, RoboPoint falls back to a CPU implementation:
+
+```python
+from exla.models.robopoint import robopoint
+
+# The factory function automatically detects CPU-only systems
+model = robopoint()
+
+# Run inference on CPU
+model.inference(...)
+```
+
+## Performance Considerations
+
+The performance of RoboPoint varies based on the hardware:
+
+- **GPU Implementation**: Fastest performance, recommended for production use
+- **Jetson Implementation**: Optimized for edge deployment on NVIDIA Jetson devices
+- **CPU Implementation**: Slower but works on any system without specialized hardware
+
+For best performance on GPU systems, ensure Docker is properly configured with GPU support. 

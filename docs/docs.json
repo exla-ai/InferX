@@ -39,6 +39,7 @@
             "pages": [
               "models/deepseek",
               "models/clip",
+              "models/robopoint",
               "models/mobilenet",
               "models/resnet34"
             ]

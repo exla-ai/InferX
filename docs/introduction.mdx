@@ -45,6 +45,21 @@ response = model.generate("Tell me about artificial intelligence")
 print(response)
 ```
 
+#### Running RoboPoint
+```python
+from exla.models.robopoint import robopoint
+
+# Initialize the model
+model = robopoint()
+
+# Run inference with a text instruction
+model.inference(
+    image_path="path/to/image.jpg",
+    text_instruction="Find a few spots where I could place an object.",
+    output="path/to/output.png"
+)
+```
+
 #### Running Your Custom Model
 ```python
 from exla import Model

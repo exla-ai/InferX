@@ -13,7 +13,7 @@ def robopoint(auto_pull=True):
         An instance of the appropriate RoboPoint implementation.
     """
     device_info = detect_device()
-    print(device_info)
+
     device_type = device_info['type']
     
     if device_type == "orin_nano" or device_type == "agx_orin":

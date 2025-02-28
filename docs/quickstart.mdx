@@ -147,8 +147,53 @@ The output will be a JSON structure showing how well each image matches each tex
 
 Higher scores indicate better matches between the image and text.
 
+## Try the RoboPoint Model
+
+Let's also try the RoboPoint model, which can predict keypoint affordances in images based on natural language instructions.
+
+### 1. Prepare Your Images
+
+Save a test image to work with:
+
+```bash
+# Create a data directory if you haven't already
+mkdir -p data
+
+# Download a sample image
+wget -O data/table.jpg https://images.unsplash.com/photo-1565791380713-1756b9a05343
+```
+
+### 2. Create a Simple Script
+
+Create a file named `robopoint_example.py` with the following content:
+
+```python
+from exla.models.robopoint import robopoint
+
+# Initialize the model (automatically detects your hardware)
+model = robopoint()
+
+# Run inference with a text instruction
+model.inference(
+    image_path="data/table.jpg",
+    text_instruction="Find a few spots where I could place a cup on the empty area of the table.",
+    output="data/table_output.png"
+)
+
+print("Output saved to data/table_output.png")
+```
+
+### 3. Run the Script
+
+```bash
+python robopoint_example.py
+```
+
+The model will process the image and generate an output image with keypoints visualized based on your text instruction.
+
 ## Next Steps
 
 - Explore the [CLIP model documentation](/models/clip) for advanced usage
+- Try the [RoboPoint model](/models/robopoint) for keypoint affordance prediction
 - Try other models in the Exla SDK
 - Check out the [compatibility guide](/compatibility) for hardware-specific optimizations 
