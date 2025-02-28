@@ -1,5 +1,5 @@
 from exla.models.robopoint import robopoint
-import time
+
 
 model = robopoint()
 
@@ -16,5 +16,4 @@ output = model.inference(
     output="data/stair_output.png"
 )
 
-print(output)
 

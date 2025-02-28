@@ -341,7 +341,7 @@ class RobopointGPU(Robopoint_Base):
         Args:
             image_path: The path to the image to run inference on.
             text_instruction: The instruction to give to the model.
-            output: The path to save the output image to.
+            output: The path to save the output image to. If None, no image will be saved.
             **kwargs: Additional arguments to pass to the model.
             
         Returns:
@@ -379,13 +379,13 @@ class RobopointGPU(Robopoint_Base):
                 # Handle the input image
                 input_path = image_path
                 
-                # Set the output path
-                if output is None:
-                    temp_output_path = os.path.join(temp_dir, "output.jpg")
-                else:
-                    temp_output_path = output
-                    # Ensure the output directory exists
-                    os.makedirs(os.path.dirname(os.path.abspath(temp_output_path)), exist_ok=True)
+                # Set the output path for Docker (always use a temp path for Docker)
+                temp_output_filename = "output.jpg"
+                temp_output_path = os.path.join(temp_dir, temp_output_filename)
+                
+                # If output is specified, ensure the output directory exists
+                if output:
+                    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
                 
                 # Set the default instruction if none is provided
                 if text_instruction is None:
@@ -393,6 +393,10 @@ class RobopointGPU(Robopoint_Base):
                 
                 print(f"📷 Processing image: {os.path.basename(input_path)}")
                 print(f"💬 Instruction: {text_instruction}")
+                if output:
+                    print(f"📁 Output will be saved to: {output}")
+                else:
+                    print("📝 No output file will be saved (output parameter not specified)")
                 
                 # Run the Docker container for inference
                 try:
@@ -405,7 +409,7 @@ class RobopointGPU(Robopoint_Base):
                         "inference",
                         f"/app/input/{os.path.basename(input_path)}",
                         text_instruction,
-                        f"/app/output/{os.path.basename(temp_output_path) if output else 'output.jpg'}"
+                        f"/app/output/{temp_output_filename}"
                     ]
                     
                     logger.info(f"Running Docker command: {' '.join(cmd)}")
@@ -425,7 +429,7 @@ class RobopointGPU(Robopoint_Base):
                         return super().inference(image_path, text_instruction, output)
                     
                     # Check if the output file exists in the temp directory
-                    temp_output_file = os.path.join(temp_dir, os.path.basename(temp_output_path) if output else "output.jpg")
+                    temp_output_file = os.path.join(temp_dir, temp_output_filename)
                     if not os.path.exists(temp_output_file):
                         print(f"⚠️ Output file not found: {temp_output_file}")
                         # Check if there's a text file with the keypoints
@@ -479,6 +483,8 @@ class RobopointGPU(Robopoint_Base):
                     print(f"   • Keypoints detected: {len(keypoints)}")
                     if output:
                         print(f"   • Output visualization: {output}")
+                    else:
+                        print(f"   • No output image saved")
                     
                     return {
                         "status": "success",
