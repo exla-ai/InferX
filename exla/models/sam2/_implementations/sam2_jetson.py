@@ -414,9 +414,7 @@ class SAM2_Jetson(SAM2_Base):
         try:
             if self.use_server:
                 # Use server for inference
-                print(f"BEFORE RUNNING IN SERVER {time.time()}")
                 masks, scores, point_coords, point_labels = self.predict_masks_from_server(input_path)
-                print(f"AFTER RUNNING IN SERVER {time.time()}")
             else:
                 # Use local model for inference
                 # Load and preprocess image
@@ -566,7 +564,6 @@ class SAM2_Jetson(SAM2_Base):
         # Start timing for benchmarking
         start_time = time.time()
         
-        print(f"TEST_1 {time.time()}")
         try:
             # Detect input type (camera, video file, or image)
             is_camera = isinstance(input, int) or (isinstance(input, str) and input.startswith(('rtsp://', 'http://', 'https://', '/dev/')))
@@ -606,9 +603,7 @@ class SAM2_Jetson(SAM2_Base):
             # Handle image file
             else:
                 # Use input_path and output_path to match the method signature of inference_image
-                print(f"BEFORE INFERENCE {time.time()}")
                 result = self.inference_image(input_path=input, output_path=output, prompt=prompt)
-                print(f"AFTER COMPLETE INFERENCE {time.time()}")
                 result['processing_time'] = time.time() - start_time
                 return result
                 
