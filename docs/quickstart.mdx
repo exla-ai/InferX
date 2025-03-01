@@ -93,3 +93,113 @@ If you encounter any issues during setup:
 - Verify that your access token has the necessary permissions
 - Check that all dependencies are properly installed
 - Please don't hesitate to reach out to us on email at [contact@exla.ai](mailto:contact@exla.ai)
+
+# Getting Started with Your First Model
+
+Now that you have the Exla SDK installed, let's run your first model! We'll use the CLIP model, which is a powerful multimodal model that connects text and images.
+
+## Using CLIP for Image-Text Matching
+
+CLIP (Contrastive Language-Image Pretraining) allows you to find the best matching images for a given text description or vice versa. Here's how to use it:
+
+```python
+from exla.models.clip import clip
+import json
+
+# Initialize the model (automatically detects your hardware)
+model = clip()
+
+# Run inference with sample images and text queries
+results = model.inference(
+    image_paths=["path/to/image1.jpg", "path/to/image2.jpg"],
+    text_queries=["a photo of a dog", "a photo of a cat", "a photo of a bird"]
+)
+
+# Print results
+print(json.dumps(results, indent=2))
+```
+
+## What's Happening Behind the Scenes
+
+When you run this code:
+
+1. The Exla SDK automatically detects your hardware (Jetson, GPU, or CPU)
+2. It loads the appropriate optimized implementation of CLIP
+3. The model processes your images and text queries
+4. It returns similarity scores between each image and text query
+
+## Sample Output
+
+The output will look something like this:
+
+```json
+[
+  {
+    "a photo of a dog": [
+      {
+        "image_path": "data/dog.png",
+        "score": "23.1011"
+      },
+      {
+        "image_path": "data/cat.png",
+        "score": "17.1396"
+      }
+    ]
+  },
+  {
+    "a photo of a cat": [
+      {
+        "image_path": "data/cat.png",
+        "score": "25.3045"
+      },
+      {
+        "image_path": "data/dog.png",
+        "score": "18.7532"
+      }
+    ]
+  }
+]
+```
+
+## Real-World Example: Image Search
+
+Let's create a simple image search application using CLIP:
+
+```python
+from exla.models.clip import clip
+import os
+import glob
+
+# Initialize the CLIP model
+model = clip()
+
+# Define a directory containing your images
+image_dir = "path/to/your/images"
+image_paths = glob.glob(os.path.join(image_dir, "*.jpg"))
+
+# Get user input for search
+search_query = input("What kind of image are you looking for? ")
+
+# Run inference
+results = model.inference(
+    image_paths=image_paths,
+    text_queries=[search_query]
+)
+
+# Display top 3 results
+print(f"\nTop matches for '{search_query}':")
+for i, result in enumerate(results[0][search_query][:3]):
+    print(f"{i+1}. {os.path.basename(result['image_path'])} (Score: {result['score']})")
+```
+
+## Next Steps with Models
+
+Now that you've run your first model, you can explore other models in the Exla SDK:
+
+- **DeepSeek**: For large language model capabilities
+- **RoboPoint**: For keypoint affordance prediction in robotics
+- **SAM2**: For advanced image segmentation
+- **MobileNet**: For efficient image classification
+- **ResNet34**: For high-accuracy image classification
+
+Check out the [Models](/models) section for detailed documentation on each model.

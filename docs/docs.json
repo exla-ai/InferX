@@ -30,17 +30,35 @@
         ]
       },
       {
-        "tab": "Model Reference",
+        "tab": "Models",
         "groups": [
           {
-            "group": "Available Models",
+            "group": "Multimodal",
             "pages": [
-              "models/deepseek",
-              "models/clip",
-              "models/sam2",
+              "models/clip"
+            ]
+          },
+          {
+            "group": "Large Language Models",
+            "pages": [
+              "models/deepseek"
+            ]
+          },
+          {
+            "group": "Computer Vision",
+            "pages": [
               "models/robopoint",
+              "models/sam2",
               "models/mobilenet",
               "models/resnet34"
+            ]
+          },
+          {
+            "group": "Custom Models",
+            "pages": [
+              "models/custom-models/overview",
+              "models/custom-models/optimization",
+              "models/custom-models/deployment"
             ]
           }
         ]
@@ -48,8 +66,8 @@
     ]
   },
   "logo": {
-    "light": "assets/logo/light.svg",
-    "dark": "assets/logo/dark.svg",
+    "light": "/assets/logo/light.png",
+    "dark": "/assets/logo/dark.png",
     "href": "https://exla.ai"
   },
   "navbar": {
