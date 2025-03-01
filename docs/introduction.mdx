@@ -9,12 +9,9 @@ Exla is an advanced model optimization platform that makes AI models smaller, fa
 
 ## Key Features
 
-- **Hardware-Aware Optimization**: Automatically optimizes models based on target hardware specifications
-- **Mixed Precision Quantization**: Adaptive bit-width precision for optimal performance
-- **Structured Pruning**: Intelligent removal of redundant computations while preserving accuracy
-- **Kernel Fusion**: Advanced optimizations for reduced memory overhead and improved inference speed
-- **Simple Integration**: Deploy optimized models with minimal configuration
-- **Multiple Hardware Support**: Optimized for various GPUs and edge devices
+- **Hardware-Aware Optimization:** Automatically selects the best implementation for your hardware platform.
+- **Model Compression:** Reduces model size and tries to maintain accuracy
+- **Deployment Tools:** Simplifies model deployment on edge devices.
 
 ## Why Exla?
 
@@ -33,16 +30,14 @@ uv pip install --index-url https://pypi.exla.ai/<your-token>/simple exla
 
 ### Basic Usage
 
-#### Running DeepSeek
+#### Running DeepSeek (starts a OpenWebUI frontend)
 ```python
-from exla.models import DeepSeekR1
+from exla.models.deepseek_r1 import deepseek_r1
 
 # Initialize the model
-model = DeepSeekR1()
+model = deepseek_r1()
 
-# Generate text
-response = model.generate("Tell me about artificial intelligence")
-print(response)
+model.run()
 ```
 
 #### Running RoboPoint
@@ -56,25 +51,18 @@ model = robopoint()
 model.inference(
     image_path="path/to/image.jpg",
     text_instruction="Find a few spots where I could place an object.",
-    output="path/to/output.png"
+    output="path/to/output.png" # optional
 )
 ```
 
 #### Running Your Custom Model
 ```python
-from exla import Model
-from exla.config import ModelConfig
+from exla.optimize import optimize_model
 
-# Define your model configuration
-config = ModelConfig(
-    model_path="path/to/your/model",
-    model_type="transformer",  # or "vision", "diffusion", etc.
-    target_device="gpu"  # or "cpu", "orin_nano", etc.
+model_path = "efficientnet_b0_full.pt"
+optimized_model = optimize_model(
+    model_path
 )
-
-# Initialize and run your model
-model = Model(config)
-output = model.run(your_input)
 ```
 
 For more detailed examples and advanced usage, check out our [Quickstart Guide](/quickstart) or explore our [Hardware & Model Compatibility](/compatibility).
