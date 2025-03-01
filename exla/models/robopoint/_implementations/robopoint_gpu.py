@@ -236,64 +236,6 @@ class RobopointGPU(Robopoint_Base):
             logger.warning(f"Error building Docker image: {e}")
             return False
     
-    def push_docker_image(self, repository: str = DEFAULT_DOCKER_REPO, tag: str = DEFAULT_DOCKER_TAG) -> bool:
-        """
-        Push the Docker image to Docker Hub.
-        
-        Args:
-            repository: The Docker Hub repository to push to.
-            tag: The tag to use for the image.
-            
-        Returns:
-            bool: True if the image was pushed successfully, False otherwise.
-        """
-        if not self.docker_available:
-            logger.warning("Docker is not available. Cannot push image.")
-            return False
-        
-        # Check if the image exists locally
-        if not self._check_docker_image_exists():
-            logger.warning(f"Docker image {self.docker_image} does not exist locally. Building it first...")
-            if not self._build_docker_image():
-                logger.warning("Failed to build Docker image. Cannot push.")
-                return False
-        
-        # Tag the image with the repository and tag
-        target_image = f"{repository}:{tag}"
-        try:
-            with ProgressIndicator(f"Tagging and pushing RoboPoint Docker image to {target_image}"):
-                # Tag the image
-                tag_result = subprocess.run(
-                    ["docker", "tag", self.docker_image, target_image],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    check=False,
-                    text=True
-                )
-                
-                if tag_result.returncode != 0:
-                    logger.warning(f"Failed to tag Docker image: {tag_result.stderr}")
-                    return False
-                
-                # Push the image to Docker Hub
-                push_result = subprocess.run(
-                    ["docker", "push", target_image],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    check=False,
-                    text=True
-                )
-            
-            if push_result.returncode == 0:
-                logger.info(f"Docker image {target_image} pushed successfully.")
-                return True
-            else:
-                logger.warning(f"Failed to push Docker image: {push_result.stderr}")
-                return False
-        except Exception as e:
-            logger.warning(f"Error pushing Docker image: {e}")
-            return False
-    
     def install_dependencies(self) -> bool:
         """
         Install dependencies for the RoboPoint GPU implementation.
@@ -311,7 +253,7 @@ class RobopointGPU(Robopoint_Base):
         
         # Check if the Docker image exists and pull it if needed
         if not self._check_docker_image_exists():
-            with ProgressIndicator(f"Pulling RoboPoint Docker image {self.docker_image}"):
+            with ProgressIndicator(f"Pulling optimized RoboPoint model"):
                 if self._pull_docker_image():
                     print("✅ Dependencies installed successfully.")
                     return True
@@ -345,14 +287,16 @@ class RobopointGPU(Robopoint_Base):
             
         Returns:
             Dict[str, Any]: The inference results, including keypoints and raw response.
+            
+        Raises:
+            RuntimeError: If Docker is not available or if there are issues with the Docker image or inference.
         """
         # Print welcome message
         print("\n🚀 EXLA Optimized RoboPoint - Vision-Language Keypoint Prediction")
         
         # Check if Docker is available
         if not self.docker_available:
-            print("⚠️ Docker is not available. Falling back to base implementation.")
-            return super().inference(image_path, text_instruction, output)
+            raise RuntimeError("Docker is not available. Cannot run RoboPoint GPU implementation.")
         
         # Check if the Docker image exists and pull or build it if needed
         if not self._check_docker_image_exists():
@@ -361,13 +305,11 @@ class RobopointGPU(Robopoint_Base):
                     if not self._pull_docker_image():
                         with ProgressIndicator("Building RoboPoint Docker image locally"):
                             if not self._build_docker_image():
-                                print("⚠️ Failed to build Docker image. Falling back to base implementation.")
-                                return super().inference(image_path, text_instruction, output)
+                                raise RuntimeError("Failed to pull or build Docker image. Cannot run RoboPoint GPU implementation.")
             else:
                 with ProgressIndicator("Building RoboPoint Docker image locally"):
                     if not self._build_docker_image():
-                        print("⚠️ Failed to build Docker image. Falling back to base implementation.")
-                        return super().inference(image_path, text_instruction, output)
+                        raise RuntimeError("Failed to build Docker image. Cannot run RoboPoint GPU implementation.")
         
         # Create a temporary directory with full permissions for Docker output
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -423,9 +365,7 @@ class RobopointGPU(Robopoint_Base):
                         )
                     
                     if result.returncode != 0:
-                        print(f"⚠️ Docker inference failed: {result.stderr}")
-                        print("⚠️ Falling back to base implementation.")
-                        return super().inference(image_path, text_instruction, output)
+                        raise RuntimeError(f"Docker inference failed: {result.stderr}")
                     
                     # Check if the output file exists in the temp directory
                     temp_output_file = os.path.join(temp_dir, temp_output_filename)
@@ -450,9 +390,9 @@ class RobopointGPU(Robopoint_Base):
                                         }
                                     except Exception as e:
                                         print(f"⚠️ Failed to parse keypoints from text file: {e}")
-                        
-                        print("⚠️ Falling back to base implementation.")
-                        return super().inference(image_path, text_instruction, output)
+                                        raise RuntimeError(f"Failed to parse keypoints from text file: {e}")
+                        else:
+                            raise RuntimeError(f"Output file not found and no text output file available")
                     
                     # If output path was provided, copy the file from temp directory
                     if output:
@@ -473,6 +413,7 @@ class RobopointGPU(Robopoint_Base):
                                 keypoints = ast.literal_eval(keypoints_str)
                             except Exception as e:
                                 print(f"⚠️ Failed to parse keypoints: {e}")
+                                raise RuntimeError(f"Failed to parse keypoints: {e}")
                         elif line.startswith("Raw response:"):
                             raw_response = line.replace("Raw response:", "").strip()
                     
@@ -492,11 +433,7 @@ class RobopointGPU(Robopoint_Base):
                     }
                     
                 except Exception as e:
-                    print(f"⚠️ Error running Docker inference: {e}")
-                    print("⚠️ Falling back to base implementation.")
-                    return super().inference(image_path, text_instruction, output)
+                    raise RuntimeError(f"Error running Docker inference: {e}")
             except Exception as e:
-                print(f"⚠️ Error setting up temporary directory: {e}")
-                print("⚠️ Falling back to base implementation.")
-                return super().inference(image_path, text_instruction, output)   
+                raise RuntimeError(f"Error setting up temporary directory: {e}")
         
