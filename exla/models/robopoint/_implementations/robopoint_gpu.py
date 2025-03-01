@@ -11,6 +11,7 @@ import shutil
 import time
 import threading
 import itertools
+import logging
 from typing import Dict, List, Optional, Tuple, Union, Any
 
 from ._base import Robopoint_Base
@@ -19,6 +20,8 @@ from ._base import Robopoint_Base
 # Default Docker Hub repository for the RoboPoint image
 DEFAULT_DOCKER_REPO = "viraatdas/robopoint-gpu"
 DEFAULT_DOCKER_TAG = "latest"
+
+logger = logging.getLogger(__name__)
 
 class ProgressIndicator:
     """
