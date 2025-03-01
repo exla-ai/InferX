@@ -3,237 +3,93 @@ title: 'Quickstart'
 description: 'Get started with Exla SDK in minutes'
 ---
 
-# Quickstart Guide
+# Setup Guide
 
-This guide will help you get started with the Exla SDK quickly. We'll walk through installation and run a simple example using the CLIP model.
+This guide will walk you through setting up your environment for using the Exla SDK. We'll cover installing the necessary tools, creating a virtual environment, and installing the SDK.
 
-## Installation
+## Prerequisites
 
-Install the Exla SDK using pip:
+Before you begin, make sure you have:
 
-```bash
-uv pip install git+https://<ACCESS_TOKEN>@github.com/exla-ai/exla-sdk.git
-```
+- Python 3.10 or later installed
+- Git installed
+- Access to the Exla SDK repository (you'll need an access token)
 
-For Jetson devices, we recommend using Python 3.10 for optimal performance:
-
-```bash
-# Create a Python 3.10 virtual environment
-python3.10 -m venv exla-env
-source exla-env/bin/activate
-
-# Install Exla SDK
-pip install exla-sdk
-```
-
-## Running Your First Model
-
-Let's run a simple example using the CLIP model, which can match images with text descriptions.
-
-### 1. Prepare Your Images
-
-Save some test images to work with. For this example, we'll use two images:
+## Step 1: Set up docker in sudo mode
 
 ```bash
-# Create a data directory
-mkdir -p data
-
-# Download sample images
-wget -O data/dog.jpg https://images.unsplash.com/photo-1543466835-00a7907e9de1
-wget -O data/cat.jpg https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba
+sudo usermod -aG docker $USER
 ```
 
-### 2. Create a Simple Script
+## Step 2: Install uv
 
-Create a file named `clip_example.py` with the following content:
-
-```python
-from exla.models.clip import clip
-import json
-
-# Initialize the model (automatically detects your hardware)
-model = clip()
-
-# Run inference
-results = model.inference(
-    image_paths=["data/dog.jpg", "data/cat.jpg"],
-    text_queries=["a photo of a dog", "a photo of a cat", "a photo of a bird"]
-)
-
-# Print results
-print(json.dumps(results, indent=2))
-```
-
-### 3. Run the Script
+First, install `uv`, a fast Python package installer and resolver that we recommend for managing dependencies:
 
 ```bash
-python clip_example.py
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-You'll see real-time progress with animated spinners as the model loads and runs inference:
+This will install `uv` on your system. After installation, you may need to restart your terminal or source your shell configuration file to use `uv`.
 
-```
-✨ EXLA SDK - CLIP Model ✨
-🔍 Device Detected: AGX_ORIN
+## Step 3: Create a Project Directory
 
-📊 Initial System Resources:
-📊 Resource Monitor - NVIDIA Jetson AGX Orin
-💻 System Memory: 4.2GB / 15.6GB (27%)
-
-⠏ [0.5s] Initializing Exla Optimized CLIP model for AGX_ORIN [GPU Mode]
-✓ [0.6s] Initializing Exla Optimized CLIP model for AGX_ORIN [GPU Mode]
-
-🚀 Running CLIP inference on your images
-✓ [0.2s] Processed 2 images
-⠋ [1.2s] Loading CLIP model
-Using GPU: Orin
-✓ [4.1s] Model ready on CUDA
-⠋ [0.0s] Running CLIP inference
-✓ [0.8s] Inference completed successfully
-✓ [0.1s] Processing results
-
-✨ CLIP Inference Summary:
-   • Model: openai/clip-vit-large-patch14-336
-   • Device: CUDA
-   • Images processed: 2
-   • Text queries: 3
-   • Total time: 5.17s
-```
-
-### 4. Understand the Results
-
-The output will be a JSON structure showing how well each image matches each text query:
-
-```json
-[
-  {
-    "a photo of a dog": [
-      {
-        "image_path": "data/dog.jpg",
-        "score": "23.1011"
-      },
-      {
-        "image_path": "data/cat.jpg",
-        "score": "17.1396"
-      }
-    ]
-  },
-  {
-    "a photo of a cat": [
-      {
-        "image_path": "data/cat.jpg",
-        "score": "25.3045"
-      },
-      {
-        "image_path": "data/dog.jpg",
-        "score": "18.7532"
-      }
-    ]
-  },
-  {
-    "a photo of a bird": [
-      {
-        "image_path": "data/dog.jpg",
-        "score": "15.9280"
-      },
-      {
-        "image_path": "data/cat.jpg",
-        "score": "15.9280"
-      }
-    ]
-  }
-]
-```
-
-Higher scores indicate better matches between the image and text.
-
-## Try the RoboPoint Model
-
-Let's also try the RoboPoint model, which can predict keypoint affordances in images based on natural language instructions.
-
-### 1. Prepare Your Images
-
-Save a test image to work with:
+Create a new directory for your project and navigate into it:
 
 ```bash
-# Create a data directory if you haven't already
-mkdir -p data
-
-# Download a sample image
-wget -O data/table.jpg https://images.unsplash.com/photo-1565791380713-1756b9a05343
+mkdir exla-project && cd exla-project
 ```
 
-### 2. Create a Simple Script
+## Step 4: Create a Virtual Environment
 
-Create a file named `robopoint_example.py` with the following content:
-
-```python
-from exla.models.robopoint import robopoint
-import os
-
-# Initialize the model (automatically detects your hardware)
-model = robopoint()
-
-# Ensure output directory exists
-os.makedirs("data", exist_ok=True)
-
-# Run inference with a text instruction
-result = model.inference(
-    image_path="data/table.jpg",
-    text_instruction="Find a few spots where I could place a cup on the empty area of the table.",
-    output="data/table_output.png"
-)
-
-# Process the results
-if result["status"] == "success":
-    print(f"✅ Successfully detected {len(result['keypoints'])} keypoints")
-    print(f"📊 Keypoints (normalized coordinates):")
-    for i, (x, y) in enumerate(result['keypoints']):
-        print(f"   Point {i+1}: ({x:.4f}, {y:.4f})")
-    print(f"🖼️ Visualization saved to: data/table_output.png")
-else:
-    print(f"❌ Inference failed: {result.get('error', 'Unknown error')}")
-```
-
-### 3. Run the Script
+Create a Python virtual environment using `uv`. We recommend using Python 3.10 for optimal compatibility:
 
 ```bash
-python robopoint_example.py
+uv venv --python 3.10
 ```
 
-You'll see real-time progress with animated spinners as the model loads and runs inference:
+This creates a virtual environment in the `.venv` directory. Activate the virtual environment:
 
-```
-✨ EXLA SDK - RoboPoint Model ✨
-🔍 Device Detected: GPU
+```bash
+# On Linux/macOS
+source .venv/bin/activate
 
-⠏ [0.5s] Checking Docker availability
-✓ [0.6s] Checking Docker availability
-⠋ [1.2s] Pulling Exla Optimized RoboPoint Docker image
-✓ [4.1s] Pulling Exla Optimized RoboPoint Docker image
-
-🚀 EXLA Optimized RoboPoint - Vision-Language Keypoint Prediction
-📷 Processing image: table.jpg
-💬 Instruction: Find a few spots where I could place a cup on the empty area of the table.
-📁 Output will be saved to: data/table_output.png
-⠋ [0.0s] Running RoboPoint inference on GPU
-✓ [2.8s] Running RoboPoint inference on GPU
-
-✅ Successfully detected 5 keypoints
-📊 Keypoints (normalized coordinates):
-   Point 1: (0.4231, 0.5642)
-   Point 2: (0.6754, 0.4987)
-   Point 3: (0.5123, 0.6231)
-   Point 4: (0.3987, 0.4532)
-   Point 5: (0.7123, 0.5876)
-🖼️ Visualization saved to: data/table_output.png
+# On Windows
+.venv\Scripts\activate
 ```
 
-The model will process the image and generate an output image with keypoints visualized based on your text instruction.
+## Step 5: Set the GitHub Token
+
+Set the GitHub token as an environment variable:
+
+```bash
+export EXLA_TOKEN=ghp_xxxxxx # Replace with token provided by Exla team
+```
+
+## Step 6: Install the Exla SDK
+
+Install the Exla SDK directly from the GitHub repository using your access token:
+
+```bash
+uv pip install git+https://${EXLA_TOKEN}@github.com/exla-ai/exla-sdk.git
+```
+
+If everything is set up correctly, you should see the Exla SDK version and a success message!
+
 
 ## Next Steps
 
-- Explore the [CLIP model documentation](/models/clip) for advanced usage
+Now that you have set up your environment and tested the Exla SDK, you can:
+
+- Explore the [Quickstart Guide](/quickstart) for more examples
+- Check out the [CLIP model documentation](/models/clip) for image-text matching
 - Try the [RoboPoint model](/models/robopoint) for keypoint affordance prediction
-- Try other models in the Exla SDK
-- Check out the [compatibility guide](/compatibility) for hardware-specific optimizations 
+- Learn about [hardware compatibility](/compatibility) for optimized performance
+
+## Troubleshooting
+
+If you encounter any issues during setup:
+
+- Make sure you're using Python 3.10 or later
+- Verify that your access token has the necessary permissions
+- Check that all dependencies are properly installed
+- Please don't hesitate to reach out to us on email at [contact@exla.ai](mailto:contact@exla.ai)

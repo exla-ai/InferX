@@ -17,10 +17,7 @@
             "group": "Getting Started",
             "pages": [
               "introduction",
-              "setup",
-              "quickstart",
-              "installation",
-              "compatibility"
+              "quickstart"
             ]
           },
           {

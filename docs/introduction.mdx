@@ -17,55 +17,7 @@ Exla is an advanced model optimization platform that makes AI models smaller, fa
 
 Optimizing models for edge devices like NVIDIA Jetsons and Raspberry Pis is notoriously complex and time-consuming. Exla automates this process, making it possible to run large models on low-power hardware without sacrificing performance.
 
-## Getting Started
-
-### Installation
-
-1. First, request an access token by emailing us at contact@exla.ai
-
-2. Once you have your token, you can follow our [Setup Guide](/setup) for detailed instructions, or install Exla using `uv`:
-```bash
-uv pip install --index-url https://pypi.exla.ai/<your-token>/simple exla
-```
-
-### Basic Usage
-
-#### Running DeepSeek (starts a OpenWebUI frontend)
-```python
-from exla.models.deepseek_r1 import deepseek_r1
-
-# Initialize the model
-model = deepseek_r1()
-
-model.run()
-```
-
-#### Running RoboPoint
-```python
-from exla.models.robopoint import robopoint
-
-# Initialize the model
-model = robopoint()
-
-# Run inference with a text instruction
-model.inference(
-    image_path="path/to/image.jpg",
-    text_instruction="Find a few spots where I could place an object.",
-    output="path/to/output.png" # optional
-)
-```
-
-#### Running Your Custom Model
-```python
-from exla.optimize import optimize_model
-
-model_path = "efficientnet_b0_full.pt"
-optimized_model = optimize_model(
-    model_path
-)
-```
-
-For more detailed examples and advanced usage, check out our [Setup Guide](/setup), [Quickstart Guide](/quickstart) or explore our [Hardware & Model Compatibility](/compatibility).
+Ready to get started? Check out our [Quickstart Guide](/quickstart) to begin optimizing your models.
 
 ## Connect With Us
 
