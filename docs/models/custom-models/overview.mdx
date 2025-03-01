@@ -1,154 +1,240 @@
 ---
-title: 'Optimize your own models'
-description: 'Learn how to use your own custom models with the Exla SDK'
+title: 'Overview of custom models'
+description: 'Learn how to optimize and deploy custom models with the Exla SDK'
 ---
 
 # Custom Models Overview
 
-The Exla SDK allows you to deploy your own custom machine learning models on edge devices. This guide shows you how to quickly load and use your pre-trained models.
+The Exla SDK provides powerful hardware-aware optimization for your custom machine learning models. With just a few lines of code, you can dramatically improve inference speed and reduce model size while maintaining accuracy.
 
-## Supported Model Formats
+## Quick Start: Optimize Your Model
 
-The Exla SDK supports the following model formats:
-
-- ONNX (.onnx)
-- PyTorch (.pt, .pth)
-- TensorFlow (.pb, .savedmodel)
-
-## Quick Start: Load and Use Your Model
-
-Loading and using your pre-trained model with Exla is as simple as:
+Optimizing your model with Exla is as simple as:
 
 ```python
-from exla import load_model
+from exla.optimize import optimize_model
+import torch
 
-# Load your model directly from a file path
-model = load_model("path/to/your/model.onnx")
+# Load and optimize your model
+model_path = "your_model.pt"
+optimized_model = optimize_model(model_path)
 
-# Run inference with your model
-result = model.predict(input_data)
-print(result)
+# Run inference with the optimized model
+input_tensor = torch.randn(1, 3, 224, 224).cuda()
+predictions = optimized_model(input_tensor)
 ```
 
-That's it! Exla handles all the optimization and deployment details for you.
+### Example using a pre-trained model
 
-## What's Happening Behind the Scenes
+**Download the model**
+```python
+import torch
+import torchvision.models as models
 
-When you call `load_model()`, Exla automatically:
+# Load the pretrained EfficientNet-B0 model
+model = models.efficientnet_b0(pretrained=True)
+model.eval()  # set to evaluation mode
 
-1. **Detects the model format** based on the file extension
-2. **Optimizes the model** for your current hardware
-3. **Sets up efficient memory management** for inference
-4. **Configures hardware acceleration** when available
+# Save the full model locally (this saves both architecture and weights)
+torch.save(model, "efficientnet_b0_full.pt")
+```
 
-During inference with `model.predict()`, Exla:
+**Optimize the model**
+```python
+from exla.optimize import optimize_model
+import torch
 
-1. **Preprocesses your input data** to match model requirements
-2. **Runs the optimized model** using available accelerators
-3. **Postprocesses the output** into a user-friendly format
+# Load and optimize the model with FP16 precision
+model_path = "efficientnet_b0_full.pt"
+optimized_model = optimize_model(
+    model_path
+)
 
-## Deep Dive: The Optimization Process
+# Run inference with batch size 1
+# Random input to represent an RGB image
+input_tensor = torch.randn(1, 3, 224, 224).cuda()
+predictions = optimized_model(input_tensor)
+    
+# Print top 5 predictions
+probs = torch.nn.functional.softmax(predictions[0], dim=0)
+_, top5_indices = torch.topk(probs, 5)
+print("\nTop 5 predictions:")
+for idx in top5_indices:
+    print(f"Class {idx.item()}: {probs[idx].item()*100:.1f}%")
+```
+## Supported Model Formats
 
-When Exla optimizes your model for GPU execution, it performs several sophisticated steps:
+Exla supports models from popular frameworks:
+- PyTorch (`.pth`, `.pt`)
+- TorchScript
+- ONNX (`.onnx`)
+- TensorFlow SavedModel
 
-### 1. Model Analysis and Preparation
+## What is happening behind the scenes?
 
-- **Format Detection**: Identifies whether your model is PyTorch, TorchScript, or already optimized
-- **Memory Footprint Analysis**: Measures the original model's memory usage and weight size
-- **Benchmark Baseline**: Establishes performance baselines by running inference benchmarks
+Exla employs several sophisticated techniques to optimize your models:
+
+### 1. TensorRT Compilation
+
+For GPU targets, Exla uses TensorRT to compile your model with optimizations like:
+
+- **Operation Fusion**: Combines multiple operations (e.g., Conv+BatchNorm+ReLU) into single, optimized kernels
+- **Kernel Auto-Tuning**: Selects the most efficient implementation for your specific GPU
+- **Memory Access Optimization**: Improves memory access patterns for faster execution
+- **Dynamic Tensor Memory**: Efficiently reuses memory during inference
 
 ### 2. Precision Optimization
 
-Exla can optimize your model to run with different precision levels:
+Exla supports multiple precision levels to balance accuracy and performance:
 
-- **FP32 (32-bit floating point)**: Highest precision, baseline performance
-- **FP16 (16-bit floating point)**: ~2x smaller, faster with minimal accuracy loss
-- **INT8 (8-bit integer)**: ~4x smaller, significantly faster with some accuracy trade-off
-
-### 3. TensorRT Compilation
-
-For GPU targets, Exla uses TensorRT to compile your model:
+- **FP32 (32-bit floating point)**: Baseline precision with no accuracy loss
+- **FP16 (16-bit floating point)**: ~2x smaller models with minimal accuracy impact
+- **INT8 (8-bit integer quantization)**: ~4x smaller models with significant speed improvements
 
 ```python
-# What happens inside Exla when optimizing for GPU
-trt_model = torch_tensorrt.compile(
-    model,
-    inputs=[input_specification],
-    enabled_precisions={selected_precision},
-    workspace_size=workspace_memory
+# Specify precision during optimization
+optimized_model = optimize_model(
+    model_path,
+    precision="fp16"  # Options: "fp32", "fp16", "int8"
 )
 ```
 
-This compilation process:
-- Analyzes the computational graph
-- Fuses operations where possible (e.g., Conv+BatchNorm+ReLU into a single operation)
-- Optimizes memory access patterns
-- Selects the most efficient kernels for your specific GPU
+### 3. ZeroQ Quantization
 
-### 4. Accuracy Verification
+Exla implements ZeroQ, a data-free quantization technique that:
 
-Exla verifies that the optimized model maintains accuracy:
+- Generates synthetic calibration data matching your model's statistics
+- Optimizes quantization parameters without requiring real data
+- Preserves accuracy by analyzing BatchNorm statistics
+- Enables INT8 quantization with minimal accuracy loss
 
-- Generates synthetic validation data
-- Compares predictions between original and optimized models
-- Ensures top-1 and top-5 accuracy remain high
+Under the hood, Exla:
+1. Analyzes your model's BatchNorm layers
+2. Generates synthetic data that matches the statistical distribution
+3. Uses this data to calibrate the quantization process
+4. Verifies accuracy against the original model
 
-### 5. Performance Measurement
+### 4. Workspace Memory Optimization
 
-After optimization, Exla measures the improvements:
-
-- **Inference Speed**: Typically 2-5x faster depending on the model
-- **Memory Usage**: Reduced by 50-75% with quantization
-- **Model Size**: Smaller file size for easier deployment
-
-## Customizing Model Loading
-
-If you need more control, you can specify additional options:
+Exla carefully manages GPU memory usage:
 
 ```python
-from exla import load_model
-
-# Load with custom options
-model = load_model(
-    "path/to/your/model.onnx",
-    device="gpu",               # Use GPU for inference
-    optimization_level="high",  # Apply aggressive optimizations
-    quantize=True,              # Enable quantization for faster inference
-    batch_size=4                # Set default batch size
+# Configure workspace memory
+optimized_model = optimize_model(
+    model_path,
+    workspace_size=1 << 20  # 1 MB workspace
 )
-
-# The model is ready to use with all optimizations applied
-results = model.predict(input_data)
 ```
 
-## Working with Different Input Types
+### 5. Dynamic Shape Support
 
-Exla handles various input types automatically:
+For models that need to handle variable input sizes:
 
 ```python
-# Image input (from file path)
-result = model.predict("path/to/image.jpg")
+# Enable dynamic shape support
+optimized_model = optimize_model(
+    model_path,
+    dynamic_shape=True
+)
+```
 
-# Image input (from PIL Image)
-from PIL import Image
-img = Image.open("path/to/image.jpg")
-result = model.predict(img)
+## Performance Improvements
 
-# Numeric input (numpy array)
-import numpy as np
-data = np.random.rand(1, 3, 224, 224)
-result = model.predict(data)
+When you optimize a model with Exla, you can expect:
 
-# Text input
-result = model.predict("Translate this text to French")
+- **2-5x faster inference** depending on the model and hardware
+- **50-75% reduction in memory usage** with quantization
+- **4x smaller model size** with INT8 quantization
+- **Minimal accuracy loss** with our precision-preserving techniques
+
+## Behind the Scenes: The Optimization Pipeline
+
+Here's what happens when you call `optimize_model()`:
+
+1. **Model Analysis**
+   - Loads your model and analyzes its architecture
+   - Determines the optimal optimization strategy
+   - Measures baseline performance metrics
+
+2. **Synthetic Data Generation**
+   - Creates calibration data using BatchNorm statistics
+   - Ensures quantization preserves the model's statistical properties
+   - Eliminates the need for real calibration data
+
+3. **TensorRT Compilation**
+   - Converts your model to TensorRT format
+   - Applies kernel fusion and other optimizations
+   - Selects the most efficient implementation for your GPU
+
+4. **Accuracy Verification**
+   - Compares predictions between original and optimized models
+   - Ensures top-1 and top-5 accuracy remain high
+   - Validates that optimization preserves model behavior
+
+5. **Performance Measurement**
+   - Benchmarks inference speed
+   - Measures memory usage reduction
+   - Calculates overall speedup factor
+
+## Example: Complete Optimization Workflow
+
+```python
+from exla.optimize import optimize_model
+import torch
+import time
+
+# Load and optimize the model with FP16 precision
+model_path = "efficientnet_b0.pt"
+print("Starting optimization...")
+
+# Optimize with specific settings
+optimized_model = optimize_model(
+    model_path,
+    precision="fp16",
+    workspace_size=1 << 24,  # 16 MB workspace
+    dynamic_shape=False,
+    input_shape=(3, 224, 224)
+)
+
+# Benchmark the optimized model
+input_tensor = torch.randn(1, 3, 224, 224).cuda()
+
+# Warmup
+for _ in range(10):
+    _ = optimized_model(input_tensor)
+    torch.cuda.synchronize()
+
+# Measure inference time
+iterations = 100
+start_time = time.time()
+for _ in range(iterations):
+    _ = optimized_model(input_tensor)
+    torch.cuda.synchronize()
+end_time = time.time()
+
+# Calculate average inference time
+avg_time = (end_time - start_time) * 1000 / iterations
+print(f"Average inference time: {avg_time:.2f} ms")
+
+# Run inference with batch size 1
+predictions = optimized_model(input_tensor)
+    
+# Print top 5 predictions
+probs = torch.nn.functional.softmax(predictions[0], dim=0)
+_, top5_indices = torch.topk(probs, 5)
+print("\nTop 5 predictions:")
+for idx in top5_indices:
+    print(f"Class {idx.item()}: {probs[idx].item()*100:.1f}%")
 ```
 
 ## Best Practices
 
-- **Use the right format**: ONNX generally provides the best cross-platform performance
-- **Optimize for size**: Smaller models run faster on edge devices
-- **Batch processing**: For multiple inputs, use batching for better throughput
-- **Test on target hardware**: Performance can vary across different devices
+- **Start with FP16 precision** for a good balance of speed and accuracy
+- **Use INT8 quantization** when maximum performance is needed
+- **Benchmark on your target hardware** to find the optimal configuration
+- **Verify accuracy** after optimization, especially with INT8 quantization
+- **Use batch processing** when possible for better throughput
 
-With Exla, deploying your custom models on edge devices is straightforward and requires minimal code.
+With Exla, you can achieve dramatic performance improvements with minimal code changes, making it possible to run sophisticated models on resource-constrained devices.
 
+ 

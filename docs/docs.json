@@ -54,11 +54,9 @@
             ]
           },
           {
-            "group": "Custom Models",
+            "group": "Optimize your own models",
             "pages": [
-              "models/custom-models/overview",
-              "models/custom-models/optimization",
-              "models/custom-models/deployment"
+              "models/custom-models/overview"
             ]
           }
         ]
