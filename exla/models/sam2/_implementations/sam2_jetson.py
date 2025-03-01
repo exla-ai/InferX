@@ -18,6 +18,17 @@ from PIL import Image
 import matplotlib
 matplotlib.use('Agg')  # Use Agg backend for non-interactive plotting
 
+
+def timing_decorator(func):
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        print(f"[BENCHMARK] Starting {func.__name__}...")
+        result = func(*args, **kwargs)
+        elapsed = time.time() - start_time
+        print(f"[BENCHMARK] {func.__name__} completed in {elapsed:.4f} seconds")
+        return result
+    return wrapper
+
 class ProgressIndicator:
     """
     A simple spinner progress indicator with timing information.
@@ -318,7 +329,7 @@ class SAM2_Jetson(SAM2_Base):
         
         return masks, scores, point_coords, point_labels
     
-    def visualize_masks(self, image, masks, scores, point_coords, point_labels, output_dir=None, prefix="Torch-TRT"):
+    def visualize_masks(self, image, masks, scores, point_coords, point_labels, output_dir=None, prefix=""):
         """
         Visualize and save masks overlaid on the original image.
         
@@ -362,8 +373,9 @@ class SAM2_Jetson(SAM2_Base):
             overlay = image.copy()
             cv2.addWeighted(mask_color, 0.6, overlay, 0.4, 0, overlay)
             
-            # Save the direct overlay
-            direct_overlay_path = os.path.join(base_path, f"{prefix}_direct_overlay_{i+1}.png")
+            # Save the direct overlay - remove underscore from beginning of filename
+            filename_prefix = prefix + "direct_overlay" if prefix else "direct_overlay"
+            direct_overlay_path = os.path.join(base_path, f"{filename_prefix}_{i+1}.png")
             cv2.imwrite(direct_overlay_path, cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
             
             # Create matplotlib visualization
@@ -375,11 +387,14 @@ class SAM2_Jetson(SAM2_Base):
             if point_coords is not None and point_labels is not None:
                 self.show_points(point_coords, point_labels, plt.gca())
             
-            plt.title(f"{prefix} Mask {i + 1}, Score: {score:.3f}", fontsize=18)
+            # Format title with prefix (if any)
+            title_prefix = f"{prefix} " if prefix else ""
+            plt.title(f"{title_prefix}Mask {i + 1}, Score: {score:.3f}", fontsize=18)
             plt.axis('off')
             
-            # Save matplotlib visualization
-            output_path = os.path.join(base_path, f"{prefix}_output_mask_{i+1}.png")
+            # Save matplotlib visualization - remove underscore from beginning of filename
+            output_filename = f"{prefix}output_mask_{i+1}.png" if prefix else f"output_mask_{i+1}.png"
+            output_path = os.path.join(base_path, output_filename)
             plt.savefig(output_path, bbox_inches='tight', pad_inches=0, dpi=200)
             plt.close()
     
@@ -399,7 +414,9 @@ class SAM2_Jetson(SAM2_Base):
         try:
             if self.use_server:
                 # Use server for inference
+                print(f"BEFORE RUNNING IN SERVER {time.time()}")
                 masks, scores, point_coords, point_labels = self.predict_masks_from_server(input_path)
+                print(f"AFTER RUNNING IN SERVER {time.time()}")
             else:
                 # Use local model for inference
                 # Load and preprocess image
@@ -458,7 +475,7 @@ class SAM2_Jetson(SAM2_Base):
                 if os.path.isdir(output_path) or not os.path.splitext(output_path)[1]:
                     # It's a directory
                     output_dir = output_path
-                    prefix = "Torch-TRT"
+                    prefix = ""
                 else:
                     # It's a file, extract directory and use filename as prefix
                     output_dir = os.path.dirname(output_path)
@@ -470,6 +487,7 @@ class SAM2_Jetson(SAM2_Base):
                 if self.use_server:
                     image = Image.open(input_path).convert("RGB")
                 
+                print(f"BEFORE VISUALIZE MASKS {time.time()}")
                 # Generate visualizations
                 self.visualize_masks(
                     image=image,
@@ -480,7 +498,8 @@ class SAM2_Jetson(SAM2_Base):
                     output_dir=output_dir,
                     prefix=prefix
                 )
-                
+
+                print(f"AFTER VISUALIZE MASKS {time.time()}")             
                 # Also create a simple overlay for backward compatibility
                 if not os.path.isdir(output_path):
                     if self.use_server:
@@ -522,24 +541,281 @@ class SAM2_Jetson(SAM2_Base):
                 "error": str(e)
             }
     
+
     def inference(self, input, output=None, prompt=None):
         """
         Run inference with the SAM2 model.
         
         Args:
-            input (str): Path to input image or camera index/URL
+            input (str or int): Path to input image, video file, or camera index/URL
             output (str, optional): Path to save the output
-            prompt (dict, optional): Prompt for the model (points, boxes, etc.)
+            prompt (dict, optional): Prompt for the model with one of the following formats:
+                - Point prompt: {"points": [[x1, y1], ...], "labels": [1, ...]}
+                - Box prompt: {"box": [x1, y1, x2, y2]}
+                - Mask prompt: {"mask": binary_mask_array}
+                - Text prompt: {"text": "description of object"}
+            
+        Returns:
+            dict: Results from the segmentation including:
+                - status: "success" or "error"
+                - masks: List of binary masks
+                - scores: Confidence scores for each mask
+                - processing_time: Time taken for inference (if benchmarking)
+                - error: Error message (if status is "error")
+        """
+        # Start timing for benchmarking
+        start_time = time.time()
+        
+        print(f"TEST_1 {time.time()}")
+        try:
+            # Detect input type (camera, video file, or image)
+            is_camera = isinstance(input, int) or (isinstance(input, str) and input.startswith(('rtsp://', 'http://', 'https://', '/dev/')))
+            is_video_file = isinstance(input, str) and input.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv'))
+            
+            # Handle camera input
+            if is_camera:
+                if self.use_server:
+                    return {
+                        "status": "error",
+                        "error": "Camera processing is not supported in server mode. Please use a local model.",
+                        "processing_time": time.time() - start_time
+                    }
+                # Use camera_source parameter name for inference_camera
+                return self.inference_camera(camera_source=input, output=output, prompt=prompt)
+            
+            # Handle video file
+            elif is_video_file:
+                if self.use_server:
+                    print("⚠️ Warning: Video processing in server mode is limited. Using frame-by-frame processing.")
+                    # Use named parameters for process_video_in_server_mode
+                    return self.process_video_in_server_mode(
+                        video_path=input, 
+                        output_path=output, 
+                        prompt=prompt, 
+                        start_time=start_time
+                    )
+                else:
+                    # Use video_path and output_path parameter names for simulate_camera_with_video
+                    return self.simulate_camera_with_video(
+                        video_path=input, 
+                        output_path=output, 
+                        display=False, 
+                        center_point=prompt
+                    )
+            
+            # Handle image file
+            else:
+                # Use input_path and output_path to match the method signature of inference_image
+                print(f"BEFORE INFERENCE {time.time()}")
+                result = self.inference_image(input_path=input, output_path=output, prompt=prompt)
+                print(f"AFTER COMPLETE INFERENCE {time.time()}")
+                result['processing_time'] = time.time() - start_time
+                return result
+                
+        except Exception as e:
+            print(f"❌ Error during inference: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "processing_time": time.time() - start_time
+            }
+    
+    @timing_decorator
+    def process_video_in_server_mode(self, video_path, output_path, prompt, start_time):
+        """
+        Process a video file in server mode by extracting frames, processing them individually,
+        and combining them into a video output.
+        
+        Args:
+            video_path: Path to the input video
+            output_path: Path to save the output
+            prompt: Prompt for segmentation
+            start_time: Start time for benchmarking
             
         Returns:
             dict: Results from the segmentation
         """
-        # Check if input is a camera stream
-        if isinstance(input, (int, str)) and (isinstance(input, int) or input.startswith(('rtsp://', 'http://', 'https://', '/dev/'))):
-            return self.inference_camera(input, output, prompt)
-        else:
-            return self.inference_image(input, output, prompt)
+        try:
+            print(f"[BENCHMARK] Starting video processing in server mode: {video_path}")
             
+            # Check if output_path is a directory
+            setup_start = time.time()
+            if os.path.isdir(output_path):
+                output_video = os.path.join(output_path, "segmented_video.mp4")
+                # Ensure the directory exists
+                os.makedirs(output_path, exist_ok=True)
+            else:
+                output_video = output_path
+                # Ensure the parent directory exists
+                output_dir = os.path.dirname(output_video)
+                if output_dir:  # Only create if there's a directory component
+                    os.makedirs(output_dir, exist_ok=True)
+            print(f"[BENCHMARK] Output setup completed in {time.time() - setup_start:.4f} seconds")
+            
+            # Open the video file
+            video_open_start = time.time()
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                raise ValueError(f"Could not open video file: {video_path}")
+                
+            # Get video properties
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            print(f"[BENCHMARK] Video open and property reading completed in {time.time() - video_open_start:.4f} seconds")
+            
+            # Setup output video writer
+            writer_start = time.time()
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            video_writer = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
+            print(f"[BENCHMARK] Video writer setup completed in {time.time() - writer_start:.4f} seconds")
+            
+            # Process frames
+            frame_count = 0
+            processing_times = []
+            
+            print(f"[BENCHMARK] Processing video with {total_frames} frames at {fps} FPS")
+            print(f"[BENCHMARK] Frame dimensions: {width}x{height}")
+            
+            # Flag to track if we've shown the resize message
+            resize_message_shown = False
+            
+            # Create a temporary directory for frames
+            temp_dir_start = time.time()
+            with tempfile.TemporaryDirectory() as temp_dir:
+                print(f"[BENCHMARK] Temporary directory creation completed in {time.time() - temp_dir_start:.4f} seconds")
+                
+                while True:
+                    frame_start = time.time()
+                    # Read frame
+                    read_start = time.time()
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    read_time = time.time() - read_start
+                    
+                    # Save frame as temporary image
+                    save_start = time.time()
+                    frame_path = os.path.join(temp_dir, f"frame_{frame_count:06d}.jpg")
+                    cv2.imwrite(frame_path, frame)
+                    save_time = time.time() - save_start
+                    
+                    # Process frame with SAM2
+                    frame_start_time = time.time()
+                    
+                    # Use the provided prompt or default to center point
+                    if prompt is None:
+                        # Default point in the center of the image
+                        h, w = frame.shape[:2]
+                        frame_prompt = {
+                            "points": [[w//2, h//2]],
+                            "labels": [1]
+                        }
+                    else:
+                        frame_prompt = prompt
+                    
+                    # Process the frame - use input_path instead of input to match the method signature
+                    inference_start = time.time()
+                    frame_result = self.inference_image(
+                        input_path=frame_path,
+                        output_path=None,  # Don't save intermediate results
+                        prompt=frame_prompt
+                    )
+                    inference_time = time.time() - inference_start
+                    
+                    # Check if processing was successful
+                    visualization_start = time.time()
+                    if frame_result.get("status") == "success" and "masks" in frame_result:
+                        # Get the best mask
+                        masks = frame_result["masks"]
+                        scores = frame_result["scores"]
+                        
+                        if len(masks) > 0:
+                            # Use the highest scoring mask
+                            best_mask_idx = np.argmax(scores)
+                            mask = np.array(masks[best_mask_idx])
+                            
+                            # Show resize message only for the first frame
+                            if not resize_message_shown:
+                                print(f"[BENCHMARK] Resizing mask from {mask.shape} to {(height, width)}")
+                                resize_message_shown = True
+                            
+                            # Convert mask to PIL Image for resizing
+                            from PIL import Image
+                            mask_pil = Image.fromarray(mask.astype(np.uint8) * 255)
+                            mask_pil = mask_pil.resize((width, height), Image.NEAREST)
+                            
+                            # Convert back to numpy array and ensure it's boolean
+                            mask_resized = np.array(mask_pil) > 127
+                            
+                            # Create visualization
+                            mask_overlay = np.zeros_like(frame)
+                            mask_overlay[mask_resized] = [0, 114, 255]  # BGR format for OpenCV
+                            
+                            # Blend with original frame
+                            result_frame = cv2.addWeighted(frame, 0.7, mask_overlay, 0.3, 0)
+                            
+                            # Add frame number and processing time
+                            process_time = time.time() - frame_start_time
+                            processing_times.append(process_time)
+                            avg_time = sum(processing_times) / len(processing_times)
+                            
+                            cv2.putText(result_frame, f"Frame: {frame_count} | Time: {process_time:.3f}s | Avg: {avg_time:.3f}s", 
+                                      (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                            
+                            # Write to output video
+                            video_writer.write(result_frame)
+                        else:
+                            # No masks found, use original frame
+                            video_writer.write(frame)
+                    else:
+                        # Processing failed, use original frame
+                        video_writer.write(frame)
+                    visualization_time = time.time() - visualization_start
+                    
+                    frame_count += 1
+                    frame_total_time = time.time() - frame_start
+                    
+                    # Print progress every 10 frames
+                    if frame_count % 10 == 0:
+                        progress = (frame_count / total_frames) * 100 if total_frames > 0 else 0
+                        avg_time = sum(processing_times) / len(processing_times) if processing_times else 0
+                        print(f"[BENCHMARK] Progress: {progress:.1f}% ({frame_count}/{total_frames}) | Avg time: {avg_time:.3f}s per frame")
+                        print(f"[BENCHMARK] Frame {frame_count} breakdown - Read: {read_time:.4f}s, Save: {save_time:.4f}s, Inference: {inference_time:.4f}s, Visualization: {visualization_time:.4f}s, Total: {frame_total_time:.4f}s")
+            
+            # Clean up
+            cleanup_start = time.time()
+            cap.release()
+            video_writer.release()
+            print(f"[BENCHMARK] Cleanup completed in {time.time() - cleanup_start:.4f} seconds")
+            
+            # Calculate total processing time
+            total_time = time.time() - start_time
+            avg_frame_time = sum(processing_times) / len(processing_times) if processing_times else 0
+            
+            print(f"[BENCHMARK] Video processing complete: {frame_count} frames in {total_time:.3f}s")
+            print(f"[BENCHMARK] Average processing time: {avg_frame_time:.3f}s per frame")
+            print(f"[BENCHMARK] Output saved to: {output_video}")
+            
+            return {
+                "status": "success",
+                "frames_processed": frame_count,
+                "average_time": avg_frame_time,
+                "total_time": total_time,
+                "output_path": output_video,
+                "processing_time": total_time
+            }
+            
+        except Exception as e:
+            print(f"❌ Error during video processing: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "processing_time": time.time() - start_time
+            }
+    
+    @timing_decorator
     def get_model(self):
         """
         Get direct access to the underlying SAM2 model.
@@ -555,6 +831,7 @@ class SAM2_Jetson(SAM2_Base):
             
         return self.sam
         
+    @timing_decorator
     def get_predictor(self):
         """
         Get direct access to the SAM2 predictor.
@@ -570,6 +847,227 @@ class SAM2_Jetson(SAM2_Base):
             
         return self.predictor
         
+    @timing_decorator
+    def simulate_camera_with_video(self, video_path, output_path=None, display=True, center_point=None, max_frames=None):
+        """
+        Simulate camera input using a video file and run SAM2 segmentation on each frame.
+        
+        Args:
+            video_path (str): Path to the input video file
+            output_path (str, optional): Path to save the output video
+            display (bool): Whether to display the output in a window
+            center_point (dict, optional): Point to use for segmentation (default: center of frame)
+            max_frames (int, optional): Maximum number of frames to process
+            
+        Returns:
+            dict: Results from the segmentation including processing statistics
+        """
+        print(f"[BENCHMARK] Starting camera simulation with video: {video_path}")
+        
+        if self.use_server:
+            print("⚠️ Camera simulation is not supported in server mode. Please use local model.")
+            return {"status": "error", "error": "Camera simulation not supported in server mode"}
+            
+        if self.predictor is None:
+            print("❌ Error: SAM2 predictor is not available. Cannot process video.")
+            print("This may be due to missing model files or initialization issues.")
+            return {"status": "error", "error": "SAM2 predictor not available"}
+        
+        try:
+            # Open the video file
+            video_open_start = time.time()
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                raise ValueError(f"Could not open video file: {video_path}")
+                
+            # Get video properties
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            print(f"[BENCHMARK] Video open completed in {time.time() - video_open_start:.4f} seconds")
+            print(f"[BENCHMARK] Video properties: {width}x{height} at {fps} FPS")
+            
+            # Setup output video writer if needed
+            setup_start = time.time()
+            video_writer = None
+            if output_path:
+                # Create output directory if it doesn't exist
+                output_dir = os.path.dirname(output_path)
+                if output_dir and not os.path.exists(output_dir):
+                    os.makedirs(output_dir, exist_ok=True)
+                    
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+            
+            # Setup display window if needed
+            if display:
+                try:
+                    cv2.namedWindow("SAM2 Segmentation", cv2.WINDOW_NORMAL)
+                except Exception as e:
+                    print(f"Warning: Could not create display window: {str(e)}")
+                    print("Running in headless mode (no display)")
+                    display = False
+            print(f"[BENCHMARK] Setup completed in {time.time() - setup_start:.4f} seconds")
+            
+            # Define tracking point (default: center of the frame)
+            if center_point is None:
+                center_point = {
+                    "points": [[width//2, height//2]],
+                    "labels": [1]  # Foreground point
+                }
+            
+            # Process frames
+            frame_count = 0
+            processing_times = []
+            avg_time = 0
+            results = []
+            
+            print(f"[BENCHMARK] Starting frame processing with SAM2")
+            print("[BENCHMARK] Press 'q' to quit.")
+            
+            while True:
+                frame_start = time.time()
+                
+                # Read frame
+                read_start = time.time()
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                read_time = time.time() - read_start
+                
+                # Check if we've reached max frames
+                if max_frames is not None and frame_count >= max_frames:
+                    break
+                
+                try:
+                    # Convert frame to RGB for SAM2
+                    convert_start = time.time()
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    convert_time = time.time() - convert_start
+                    
+                    # Set image in predictor
+                    set_image_start = time.time()
+                    self.predictor.set_image(frame_rgb)
+                    set_image_time = time.time() - set_image_start
+                    
+                    # Process with center point
+                    point_coords = np.array(center_point["points"])
+                    point_labels = np.array(center_point["labels"])
+                    
+                    predict_start = time.time()
+                    masks, scores, logits = self.predictor.predict(
+                        point_coords=point_coords,
+                        point_labels=point_labels,
+                        multimask_output=True
+                    )
+                    predict_time = time.time() - predict_start
+                    
+                    # Use the highest scoring mask
+                    best_mask_idx = np.argmax(scores)
+                    mask = masks[best_mask_idx]
+                    score = scores[best_mask_idx]
+                    
+                    # Create visualization
+                    vis_start = time.time()
+                    mask_overlay = np.zeros_like(frame)
+                    mask_overlay[mask] = [0, 114, 255]  # BGR format for OpenCV
+                    
+                    # Draw the center point
+                    for coord, label in zip(point_coords, point_labels):
+                        color = (0, 255, 0) if label == 1 else (0, 0, 255)
+                        cv2.drawMarker(frame, (int(coord[0]), int(coord[1])), color, 
+                                      markerType=cv2.MARKER_STAR, markerSize=20, thickness=2)
+                    
+                    # Blend with original frame
+                    result_frame = cv2.addWeighted(frame, 0.7, mask_overlay, 0.3, 0)
+                    
+                    # Add processing time text
+                    process_time = time.time() - start_time
+                    processing_times.append(process_time)
+                    avg_time = sum(processing_times) / len(processing_times)
+                    cv2.putText(result_frame, f"SAM2 | Frame: {frame_count} | Time: {process_time:.3f}s | Avg: {avg_time:.3f}s", 
+                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    vis_time = time.time() - vis_start
+                    
+                    # Store result
+                    results.append({
+                        "frame": frame_count,
+                        "score": float(score),
+                        "process_time": process_time
+                    })
+                    
+                    # Write to output video if needed
+                    write_start = time.time()
+                    if video_writer:
+                        video_writer.write(result_frame)
+                    write_time = time.time() - write_start
+                    
+                    # Display if needed
+                    display_start = time.time()
+                    if display:
+                        cv2.imshow("SAM2 Segmentation", result_frame)
+                        key = cv2.waitKey(1) & 0xFF
+                        if key == ord('q'):
+                            break
+                    display_time = time.time() - display_start
+                
+                except Exception as e:
+                    print(f"❌ Error processing frame {frame_count}: {str(e)}")
+                    # Display error on frame
+                    cv2.putText(frame, f"SAM2 Error: {str(e)}", 
+                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    
+                    if display:
+                        cv2.imshow("SAM2 Segmentation", frame)
+                        key = cv2.waitKey(1) & 0xFF
+                        if key == ord('q'):
+                            break
+                    
+                    if video_writer:
+                        video_writer.write(frame)
+                    
+                    # Store error result
+                    results.append({
+                        "frame": frame_count,
+                        "error": str(e)
+                    })
+                
+                frame_count += 1
+                frame_total_time = time.time() - frame_start
+                
+                # Print progress every 10 frames
+                if frame_count % 10 == 0:
+                    print(f"[BENCHMARK] Processed {frame_count} frames. Average time: {avg_time:.3f}s per frame")
+                    print(f"[BENCHMARK] Frame {frame_count} breakdown - Read: {read_time:.4f}s, Convert: {convert_time:.4f}s, Set Image: {set_image_time:.4f}s, Predict: {predict_time:.4f}s, Visualize: {vis_time:.4f}s, Write: {write_time:.4f}s, Display: {display_time:.4f}s, Total: {frame_total_time:.4f}s")
+            
+            # Clean up
+            cleanup_start = time.time()
+            cap.release()
+            if video_writer:
+                video_writer.release()
+            if display:
+                cv2.destroyAllWindows()
+            print(f"[BENCHMARK] Cleanup completed in {time.time() - cleanup_start:.4f} seconds")
+            
+            print(f"[BENCHMARK] Processing complete: {frame_count} frames processed")
+            if len(processing_times) > 0:
+                print(f"[BENCHMARK] Average processing time: {avg_time:.3f}s per frame")
+            
+            return {
+                "status": "success",
+                "frames_processed": frame_count,
+                "average_time": avg_time if len(processing_times) > 0 else None,
+                "results": results
+            }
+            
+        except Exception as e:
+            print(f"❌ Error during video processing: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+        
+    @timing_decorator
     def inference_camera(self, camera_source, output=None, prompt=None, max_frames=None, fps=30, display=False):
         """
         Run inference on a camera stream.
@@ -585,12 +1083,15 @@ class SAM2_Jetson(SAM2_Base):
         Returns:
             dict: Results from the segmentation
         """
+        print(f"[BENCHMARK] Starting camera inference from source: {camera_source}")
+        
         if self.use_server:
             print("⚠️ Camera stream inference is not supported in server mode. Please use local model.")
             return {"status": "error", "error": "Camera stream inference not supported in server mode"}
             
         try:
             # Open camera
+            camera_open_start = time.time()
             cap = cv2.VideoCapture(camera_source)
             if not cap.isOpened():
                 raise ValueError(f"Could not open camera source: {camera_source}")
@@ -598,8 +1099,11 @@ class SAM2_Jetson(SAM2_Base):
             # Get camera properties
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            print(f"[BENCHMARK] Camera open completed in {time.time() - camera_open_start:.4f} seconds")
+            print(f"[BENCHMARK] Camera resolution: {width}x{height}")
             
             # Setup output video writer if needed
+            setup_start = time.time()
             video_writer = None
             if output:
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -626,28 +1130,40 @@ class SAM2_Jetson(SAM2_Base):
             # Setup display window if needed
             if display:
                 cv2.namedWindow("SAM2 Segmentation", cv2.WINDOW_NORMAL)
+            print(f"[BENCHMARK] Setup completed in {time.time() - setup_start:.4f} seconds")
             
             frame_count = 0
             results = []
+            processing_times = []
             
-            print("Starting camera stream inference. Press 'q' to quit.")
+            print("[BENCHMARK] Starting camera stream inference. Press 'q' to quit.")
             
             while True:
+                frame_start = time.time()
+                
+                # Read frame
+                read_start = time.time()
                 ret, frame = cap.read()
                 if not ret:
                     break
+                read_time = time.time() - read_start
                     
                 # Check if we've reached max frames
                 if max_frames is not None and frame_count >= max_frames:
                     break
                 
                 # Convert frame to RGB for SAM
+                convert_start = time.time()
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                convert_time = time.time() - convert_start
                 
                 # Set image in predictor
+                set_image_start = time.time()
                 self.predictor.set_image(frame_rgb)
+                set_image_time = time.time() - set_image_start
                 
                 # Process based on prompt type
+                predict_start = time.time()
                 if prompt is None or "points" in prompt:
                     masks, scores, logits = self.predictor.predict(
                         point_coords=point_coords,
@@ -660,8 +1176,10 @@ class SAM2_Jetson(SAM2_Base):
                         box=input_box[None, :],
                         multimask_output=True
                     )
+                predict_time = time.time() - predict_start
                 
                 # Create visualization
+                vis_start = time.time()
                 # Use the highest scoring mask
                 best_mask_idx = np.argmax(scores)
                 mask = masks[best_mask_idx]
@@ -680,16 +1198,28 @@ class SAM2_Jetson(SAM2_Base):
                         cv2.drawMarker(result, (int(coord[0]), int(coord[1])), color, 
                                       markerType=cv2.MARKER_STAR, markerSize=20, thickness=2)
                 
+                # Add processing time information
+                process_time = time.time() - frame_start
+                processing_times.append(process_time)
+                avg_time = sum(processing_times) / len(processing_times)
+                cv2.putText(result, f"Frame: {frame_count} | Time: {process_time:.3f}s | Avg: {avg_time:.3f}s", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                vis_time = time.time() - vis_start
+                
                 # Write to output video if needed
+                write_start = time.time()
                 if video_writer:
                     video_writer.write(result)
+                write_time = time.time() - write_start
                 
                 # Display if needed
+                display_start = time.time()
                 if display:
                     cv2.imshow("SAM2 Segmentation", result)
                     key = cv2.waitKey(1) & 0xFF
                     if key == ord('q'):
                         break
+                display_time = time.time() - display_start
                 
                 # Store results
                 results.append({
@@ -699,17 +1229,30 @@ class SAM2_Jetson(SAM2_Base):
                 })
                 
                 frame_count += 1
+                frame_total_time = time.time() - frame_start
+                
+                # Print detailed timing information every 10 frames
+                if frame_count % 10 == 0:
+                    print(f"[BENCHMARK] Processed {frame_count} frames. Average time: {avg_time:.3f}s per frame")
+                    print(f"[BENCHMARK] Frame {frame_count} breakdown - Read: {read_time:.4f}s, Convert: {convert_time:.4f}s, Set Image: {set_image_time:.4f}s, Predict: {predict_time:.4f}s, Visualize: {vis_time:.4f}s, Write: {write_time:.4f}s, Display: {display_time:.4f}s, Total: {frame_total_time:.4f}s")
             
             # Clean up
+            cleanup_start = time.time()
             cap.release()
             if video_writer:
                 video_writer.release()
             if display:
                 cv2.destroyAllWindows()
+            print(f"[BENCHMARK] Cleanup completed in {time.time() - cleanup_start:.4f} seconds")
+            
+            print(f"[BENCHMARK] Camera inference complete: {frame_count} frames processed")
+            if len(processing_times) > 0:
+                print(f"[BENCHMARK] Average processing time: {avg_time:.3f}s per frame")
             
             return {
                 "status": "success",
                 "frames_processed": frame_count,
+                "average_time": avg_time if len(processing_times) > 0 else None,
                 "results": results
             }
             
