@@ -19,7 +19,7 @@ from ._base import Robopoint_Base
 
 # Default Docker Hub repository for the RoboPoint image
 DEFAULT_DOCKER_REPO = "public.ecr.aws/h1f5g0k2/exla:robopoint-gpu-latest"
-DEFAULT_DOCKER_TAG = "latest"
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class RobopointGPU(Robopoint_Base):
     def __init__(
         self,
         model_id: str = "wentao-yuan/robopoint-v1-vicuna-v1.5-13b",
-        docker_image: str = f"{DEFAULT_DOCKER_REPO}:{DEFAULT_DOCKER_TAG}",
+        docker_image: str = f"{DEFAULT_DOCKER_REPO}",
         auto_pull: bool = True,
         **kwargs
     ):
