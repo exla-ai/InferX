@@ -19,13 +19,6 @@
               "introduction",
               "quickstart"
             ]
-          },
-          {
-            "group": "Usage",
-            "pages": [
-              "guides/serving-models",
-              "guides/custom-models"
-            ]
           }
         ]
       },
