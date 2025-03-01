@@ -161,37 +161,6 @@ The output will look something like this:
 ]
 ```
 
-## Real-World Example: Image Search
-
-Let's create a simple image search application using CLIP:
-
-```python
-from exla.models.clip import clip
-import os
-import glob
-
-# Initialize the CLIP model
-model = clip()
-
-# Define a directory containing your images
-image_dir = "path/to/your/images"
-image_paths = glob.glob(os.path.join(image_dir, "*.jpg"))
-
-# Get user input for search
-search_query = input("What kind of image are you looking for? ")
-
-# Run inference
-results = model.inference(
-    image_paths=image_paths,
-    text_queries=[search_query]
-)
-
-# Display top 3 results
-print(f"\nTop matches for '{search_query}':")
-for i, result in enumerate(results[0][search_query][:3]):
-    print(f"{i+1}. {os.path.basename(result['image_path'])} (Score: {result['score']})")
-```
-
 ## Next Steps with Models
 
 Now that you've run your first model, you can explore other models in the Exla SDK:

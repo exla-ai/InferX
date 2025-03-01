@@ -1,0 +1,102 @@
+---
+title: 'MobileNet'
+description: 'A lightweight computer vision model for image classification on edge devices'
+---
+
+# MobileNet
+
+MobileNet is a lightweight computer vision model designed specifically for mobile and edge devices. It provides efficient image classification capabilities while maintaining a small footprint.
+
+## Overview
+
+MobileNet is optimized for scenarios where computational resources are limited but real-time image classification is required. Key features include:
+
+- Efficient architecture designed for mobile and edge devices
+- Good balance between accuracy and model size
+- Fast inference times
+- Suitable for real-time applications
+
+## Usage
+
+Here's a simple example of how to use MobileNet for image classification:
+
+```python
+from exla.models.mobilenet import MobileNet
+from PIL import Image
+
+# Initialize the model
+model = MobileNet()
+
+# Load an image
+image = Image.open("path/to/your/image.jpg")
+
+# Classify the image
+predictions = model.classify(image)
+print(predictions)
+```
+
+## Example Output
+
+The model returns a list of predictions with class labels and confidence scores:
+
+```python
+[
+    {"label": "golden retriever", "score": 0.85},
+    {"label": "Labrador retriever", "score": 0.10},
+    {"label": "tennis ball", "score": 0.03},
+    # ... more predictions
+]
+```
+
+## Advanced Usage
+
+### Batch Processing
+
+For processing multiple images efficiently:
+
+```python
+images = [Image.open(f) for f in ["image1.jpg", "image2.jpg", "image3.jpg"]]
+batch_predictions = model.classify_batch(images)
+```
+
+### Custom Top-K
+
+You can specify how many top predictions to return:
+
+```python
+# Return only the top 3 predictions
+predictions = model.classify(image, top_k=3)
+```
+
+## Performance Considerations
+
+MobileNet is designed for efficiency, but there are still some considerations for optimal performance:
+
+- Memory usage: ~5-10MB
+- Inference time: Typically 10-50ms on modern devices
+- Power consumption: Lower than larger models like ResNet
+
+## Example Applications
+
+- Real-time object recognition in mobile apps
+- Smart camera features
+- Augmented reality applications
+- IoT devices with visual recognition capabilities
+
+## Limitations
+
+- Lower accuracy compared to larger models like ResNet
+- Limited ability to detect small objects or fine details
+- Performance varies based on image quality and lighting conditions
+
+## Comparison with Other Models
+
+| Model | Size | Accuracy | Inference Speed |
+| --- | --- | --- | --- |
+| MobileNet | Small (~5MB) | Good | Fast |
+| ResNet34 | Medium (~80MB) | Better | Medium |
+| Vision Transformers | Large (>200MB) | Best | Slow |
+
+For applications requiring higher accuracy and where computational resources are less constrained, consider using [ResNet34](/models/resnet34) instead.
+
+For more information on optimizing model performance, see the [Custom Models Optimization](/models/custom-models/optimization) guide. 

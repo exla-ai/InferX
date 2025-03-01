@@ -1,0 +1,100 @@
+---
+title: 'Deepseek'
+description: 'A powerful large language model for text generation and reasoning'
+---
+
+# Deepseek
+
+Deepseek is a powerful large language model (LLM) designed for text generation, reasoning, and code generation tasks. This model is optimized for performance on edge devices through the Exla SDK.
+
+## Overview
+
+Deepseek is a state-of-the-art language model that can be used for a variety of natural language processing tasks, including:
+
+- Text generation and completion
+- Question answering
+- Code generation and explanation
+- Reasoning and problem-solving
+
+## Usage
+
+Here's a simple example of how to use the Deepseek model for text generation:
+
+```python
+from exla.models.deepseek_r1 import DeepseekR1
+
+# Initialize the model
+model = DeepseekR1()
+
+# Generate text
+response = model.generate("Explain how neural networks work in simple terms.")
+print(response)
+```
+
+## Parameters
+
+When generating text with Deepseek, you can customize various parameters:
+
+```python
+response = model.generate(
+    "Write a short poem about artificial intelligence.",
+    max_tokens=100,
+    temperature=0.7,
+    top_p=0.9,
+    top_k=40
+)
+```
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `max_tokens` | Maximum number of tokens to generate | 256 |
+| `temperature` | Controls randomness (higher = more random) | 0.8 |
+| `top_p` | Nucleus sampling parameter | 0.95 |
+| `top_k` | Limits vocabulary to top k tokens | 40 |
+
+## Advanced Usage
+
+### Streaming Responses
+
+For applications that require real-time responses, you can use the streaming API:
+
+```python
+model = DeepseekR1()
+
+for chunk in model.generate_stream("Explain quantum computing."):
+    print(chunk, end="", flush=True)
+```
+
+### System Prompts
+
+You can provide system prompts to guide the model's behavior:
+
+```python
+response = model.generate(
+    "What is machine learning?",
+    system_prompt="You are a helpful AI assistant that explains complex topics in simple terms."
+)
+```
+
+## Performance Considerations
+
+The Deepseek model is optimized for edge deployment but still requires significant computational resources. Consider the following when using this model:
+
+- Memory usage: ~2GB
+- Inference speed depends on the hardware capabilities
+- For longer generations, consider using streaming to improve user experience
+
+## Example Applications
+
+- Chatbots and virtual assistants
+- Content generation tools
+- Code completion systems
+- Educational applications
+
+## Limitations
+
+- May occasionally generate incorrect or nonsensical information
+- Performance varies based on prompt quality and complexity
+- Not suitable for real-time applications on very resource-constrained devices
+
+For more information on optimizing model performance, see the [Custom Models Optimization](/models/custom-models/optimization) guide. 

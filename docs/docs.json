@@ -7,7 +7,7 @@
     "light": "#818CF8",
     "dark": "#3730A3"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/logo/favicon.svg",
   "navigation": {
     "tabs": [
       {
@@ -28,7 +28,8 @@
           {
             "group": "Multimodal",
             "pages": [
-              "models/clip"
+              "models/clip",
+              "models/robopoint"
             ]
           },
           {
@@ -40,10 +41,16 @@
           {
             "group": "Computer Vision",
             "pages": [
-              "models/robopoint",
+              
               "models/sam2",
               "models/mobilenet",
               "models/resnet34"
+            ]
+          },
+          {
+            "group": "Audio",
+            "pages": [
+              "models/whisper"
             ]
           },
           {
@@ -59,8 +66,8 @@
     ]
   },
   "logo": {
-    "light": "/assets/logo/light.png",
-    "dark": "/assets/logo/dark.png",
+    "light": "/logo/light.png",
+    "dark": "/logo/dark.png",
     "href": "https://exla.ai"
   },
   "navbar": {

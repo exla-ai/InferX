@@ -1,0 +1,141 @@
+---
+title: 'Whisper'
+description: 'A powerful speech recognition model for audio transcription and translation'
+---
+
+# Whisper
+
+Whisper is a versatile automatic speech recognition (ASR) model designed for transcribing and translating spoken language. It's optimized for edge deployment through the Exla SDK.
+
+## Overview
+
+Whisper is a robust speech recognition model that can:
+
+- Transcribe speech to text in multiple languages
+- Translate spoken language to English
+- Handle various audio qualities and accents
+- Process audio files of different formats
+
+## Usage
+
+Here's a simple example of how to use Whisper for speech transcription:
+
+```python
+from exla.models.whisper import Whisper
+import numpy as np
+
+# Initialize the model
+model = Whisper()
+
+# Load audio file (as a numpy array of float32 values)
+# The audio should be sampled at 16kHz
+audio = np.load("path/to/your/audio.npy")  # or load using your preferred method
+
+# Transcribe the audio
+result = model.transcribe(audio)
+print(result["text"])
+```
+
+## Example Output
+
+The model returns a dictionary containing the transcription and additional metadata:
+
+```python
+{
+    "text": "Hello, this is a test of the Whisper speech recognition model.",
+    "segments": [
+        {
+            "id": 0,
+            "start": 0.0,
+            "end": 3.5,
+            "text": "Hello, this is a test of the",
+            "confidence": 0.95
+        },
+        {
+            "id": 1,
+            "start": 3.5,
+            "end": 5.8,
+            "text": "Whisper speech recognition model.",
+            "confidence": 0.92
+        }
+    ],
+    "language": "en"
+}
+```
+
+## Advanced Usage
+
+### Language Detection
+
+Whisper can automatically detect the language being spoken:
+
+```python
+# Detect language in the audio
+language_info = model.detect_language(audio)
+print(f"Detected language: {language_info['language']} (confidence: {language_info['confidence']})")
+```
+
+### Translation
+
+You can translate spoken content directly to English:
+
+```python
+# Translate non-English speech to English
+translation = model.translate(audio)
+print(translation["text"])
+```
+
+### Customizing Transcription
+
+You can customize the transcription process with various parameters:
+
+```python
+result = model.transcribe(
+    audio,
+    language="fr",  # Specify source language (optional)
+    task="translate",  # "transcribe" or "translate"
+    beam_size=5,  # Beam search size
+    word_timestamps=True  # Get timestamps for each word
+)
+```
+
+## Performance Considerations
+
+Whisper is optimized for edge deployment but has some requirements:
+
+- Memory usage: ~100MB (varies by model size)
+- Processing time: Typically 0.5-2x the audio duration
+- Best results with clear audio and minimal background noise
+
+## Example Applications
+
+- Voice assistants and chatbots
+- Meeting transcription
+- Subtitle generation
+- Language learning applications
+- Accessibility tools
+
+## Limitations
+
+- Performance varies with audio quality and accents
+- May struggle with heavy background noise or multiple speakers
+- Transcription accuracy depends on the language (better for widely-spoken languages)
+- Real-time transcription may be challenging on very resource-constrained devices
+
+## Model Variants
+
+Exla provides access to different Whisper model sizes:
+
+| Variant | Size | Accuracy | Speed | Memory Usage |
+| --- | --- | --- | --- | --- |
+| Tiny | ~40MB | Basic | Fastest | Lowest |
+| Base | ~80MB | Good | Fast | Low |
+| Small | ~250MB | Better | Medium | Medium |
+| Medium | ~750MB | Best | Slow | High |
+
+By default, the `Whisper()` constructor uses the "small" variant. You can specify a different variant:
+
+```python
+# Use the tiny model for faster but less accurate transcription
+model = Whisper(variant="tiny")
+``` 

@@ -1,0 +1,115 @@
+---
+title: 'ResNet34'
+description: 'A powerful residual network for image classification with high accuracy'
+---
+
+# ResNet34
+
+ResNet34 is a deep residual neural network architecture designed for image classification tasks. It offers a good balance between model size and accuracy, making it suitable for a wide range of computer vision applications.
+
+## Overview
+
+ResNet34 is part of the ResNet (Residual Network) family, which introduced skip connections to solve the vanishing gradient problem in deep neural networks. Key features include:
+
+- 34-layer deep architecture with residual connections
+- Higher accuracy than lightweight models like MobileNet
+- Reasonable computational requirements for edge deployment
+- Robust feature extraction capabilities
+
+## Usage
+
+Here's a simple example of how to use ResNet34 for image classification:
+
+```python
+from exla.models.resnet34 import ResNet34
+from PIL import Image
+
+# Initialize the model
+model = ResNet34()
+
+# Load an image
+image = Image.open("path/to/your/image.jpg")
+
+# Classify the image
+predictions = model.classify(image)
+print(predictions)
+```
+
+## Example Output
+
+The model returns a list of predictions with class labels and confidence scores:
+
+```python
+[
+    {"label": "golden retriever", "score": 0.92},
+    {"label": "Labrador retriever", "score": 0.05},
+    {"label": "tennis ball", "score": 0.01},
+    # ... more predictions
+]
+```
+
+## Advanced Usage
+
+### Batch Processing
+
+For processing multiple images efficiently:
+
+```python
+images = [Image.open(f) for f in ["image1.jpg", "image2.jpg", "image3.jpg"]]
+batch_predictions = model.classify_batch(images)
+```
+
+### Feature Extraction
+
+You can use ResNet34 as a feature extractor for downstream tasks:
+
+```python
+# Extract features from the image
+features = model.extract_features(image)
+
+# Use these features for custom downstream tasks
+# such as custom classifiers, clustering, etc.
+```
+
+### Custom Top-K
+
+You can specify how many top predictions to return:
+
+```python
+# Return only the top 5 predictions
+predictions = model.classify(image, top_k=5)
+```
+
+## Performance Considerations
+
+ResNet34 provides a good balance between accuracy and computational requirements:
+
+- Memory usage: ~80MB
+- Inference time: Typically 50-200ms on modern devices
+- Higher accuracy than MobileNet, but requires more computational resources
+
+## Example Applications
+
+- High-quality image classification
+- Object detection systems (when used as a backbone)
+- Content moderation
+- Medical image analysis
+- Industrial quality control
+
+## Limitations
+
+- Larger model size compared to MobileNet
+- Higher latency, which may impact real-time applications on resource-constrained devices
+- May struggle with very fine-grained classification tasks
+
+## Comparison with Other Models
+
+| Model | Size | Accuracy | Inference Speed |
+| --- | --- | --- | --- |
+| MobileNet | Small (~5MB) | Good | Fast |
+| ResNet34 | Medium (~80MB) | Better | Medium |
+| Vision Transformers | Large (>200MB) | Best | Slow |
+
+For applications where model size and inference speed are critical, consider using [MobileNet](/models/mobilenet) instead.
+
+For more information on optimizing model performance, see the [Custom Models Optimization](/models/custom-models/optimization) guide. 

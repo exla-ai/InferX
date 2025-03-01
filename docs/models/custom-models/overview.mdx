@@ -1,0 +1,154 @@
+---
+title: 'Optimize your own models'
+description: 'Learn how to use your own custom models with the Exla SDK'
+---
+
+# Custom Models Overview
+
+The Exla SDK allows you to deploy your own custom machine learning models on edge devices. This guide shows you how to quickly load and use your pre-trained models.
+
+## Supported Model Formats
+
+The Exla SDK supports the following model formats:
+
+- ONNX (.onnx)
+- PyTorch (.pt, .pth)
+- TensorFlow (.pb, .savedmodel)
+
+## Quick Start: Load and Use Your Model
+
+Loading and using your pre-trained model with Exla is as simple as:
+
+```python
+from exla import load_model
+
+# Load your model directly from a file path
+model = load_model("path/to/your/model.onnx")
+
+# Run inference with your model
+result = model.predict(input_data)
+print(result)
+```
+
+That's it! Exla handles all the optimization and deployment details for you.
+
+## What's Happening Behind the Scenes
+
+When you call `load_model()`, Exla automatically:
+
+1. **Detects the model format** based on the file extension
+2. **Optimizes the model** for your current hardware
+3. **Sets up efficient memory management** for inference
+4. **Configures hardware acceleration** when available
+
+During inference with `model.predict()`, Exla:
+
+1. **Preprocesses your input data** to match model requirements
+2. **Runs the optimized model** using available accelerators
+3. **Postprocesses the output** into a user-friendly format
+
+## Deep Dive: The Optimization Process
+
+When Exla optimizes your model for GPU execution, it performs several sophisticated steps:
+
+### 1. Model Analysis and Preparation
+
+- **Format Detection**: Identifies whether your model is PyTorch, TorchScript, or already optimized
+- **Memory Footprint Analysis**: Measures the original model's memory usage and weight size
+- **Benchmark Baseline**: Establishes performance baselines by running inference benchmarks
+
+### 2. Precision Optimization
+
+Exla can optimize your model to run with different precision levels:
+
+- **FP32 (32-bit floating point)**: Highest precision, baseline performance
+- **FP16 (16-bit floating point)**: ~2x smaller, faster with minimal accuracy loss
+- **INT8 (8-bit integer)**: ~4x smaller, significantly faster with some accuracy trade-off
+
+### 3. TensorRT Compilation
+
+For GPU targets, Exla uses TensorRT to compile your model:
+
+```python
+# What happens inside Exla when optimizing for GPU
+trt_model = torch_tensorrt.compile(
+    model,
+    inputs=[input_specification],
+    enabled_precisions={selected_precision},
+    workspace_size=workspace_memory
+)
+```
+
+This compilation process:
+- Analyzes the computational graph
+- Fuses operations where possible (e.g., Conv+BatchNorm+ReLU into a single operation)
+- Optimizes memory access patterns
+- Selects the most efficient kernels for your specific GPU
+
+### 4. Accuracy Verification
+
+Exla verifies that the optimized model maintains accuracy:
+
+- Generates synthetic validation data
+- Compares predictions between original and optimized models
+- Ensures top-1 and top-5 accuracy remain high
+
+### 5. Performance Measurement
+
+After optimization, Exla measures the improvements:
+
+- **Inference Speed**: Typically 2-5x faster depending on the model
+- **Memory Usage**: Reduced by 50-75% with quantization
+- **Model Size**: Smaller file size for easier deployment
+
+## Customizing Model Loading
+
+If you need more control, you can specify additional options:
+
+```python
+from exla import load_model
+
+# Load with custom options
+model = load_model(
+    "path/to/your/model.onnx",
+    device="gpu",               # Use GPU for inference
+    optimization_level="high",  # Apply aggressive optimizations
+    quantize=True,              # Enable quantization for faster inference
+    batch_size=4                # Set default batch size
+)
+
+# The model is ready to use with all optimizations applied
+results = model.predict(input_data)
+```
+
+## Working with Different Input Types
+
+Exla handles various input types automatically:
+
+```python
+# Image input (from file path)
+result = model.predict("path/to/image.jpg")
+
+# Image input (from PIL Image)
+from PIL import Image
+img = Image.open("path/to/image.jpg")
+result = model.predict(img)
+
+# Numeric input (numpy array)
+import numpy as np
+data = np.random.rand(1, 3, 224, 224)
+result = model.predict(data)
+
+# Text input
+result = model.predict("Translate this text to French")
+```
+
+## Best Practices
+
+- **Use the right format**: ONNX generally provides the best cross-platform performance
+- **Optimize for size**: Smaller models run faster on edge devices
+- **Batch processing**: For multiple inputs, use batching for better throughput
+- **Test on target hardware**: Performance can vary across different devices
+
+With Exla, deploying your custom models on edge devices is straightforward and requires minimal code.
+
