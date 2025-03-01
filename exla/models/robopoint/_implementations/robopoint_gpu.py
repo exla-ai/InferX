@@ -18,7 +18,7 @@ from ._base import Robopoint_Base
 
 
 # Default Docker Hub repository for the RoboPoint image
-DEFAULT_DOCKER_REPO = "viraatdas/robopoint-gpu"
+DEFAULT_DOCKER_REPO = "public.ecr.aws/h1f5g0k2/exla:robopoint-gpu-latest"
 DEFAULT_DOCKER_TAG = "latest"
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ class RobopointGPU(Robopoint_Base):
         
         # Check if the Docker image exists and pull it if needed
         if self.docker_available and auto_pull and not self._check_docker_image_exists():
-            with ProgressIndicator(f"Pulling RoboPoint Docker image {self.docker_image}"):
+            with ProgressIndicator(f"Pulling Exla Optimized RoboPoint Docker image"):
                 self._pull_docker_image()
         
     def _check_docker_available(self) -> bool:

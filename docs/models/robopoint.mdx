@@ -26,7 +26,7 @@ The RoboPoint model is included in the Exla SDK. No separate installation is req
 pip install exla-sdk
 ```
 
-For GPU implementation, Docker is required as the model runs in a containerized environment.
+For GPU implementation, Docker is required as the model runs in a containerized environment. The SDK will automatically pull the required Docker image from our public ECR repository.
 
 ## Basic Usage
 
@@ -74,6 +74,50 @@ model.inference(
 )
 ```
 
+### Comprehensive GPU Example
+
+This example demonstrates how to use the RoboPoint model with GPU acceleration, including handling the Docker image and processing the results:
+
+```python
+from exla.models.robopoint import robopoint
+import os
+
+# Initialize the model with GPU support
+# This will automatically pull the Docker image if needed
+model = robopoint(auto_pull=True)
+
+# Define paths
+input_image = "data/robot_workspace.jpg"
+output_image = "data/robot_workspace_keypoints.jpg"
+
+# Ensure output directory exists
+os.makedirs(os.path.dirname(output_image), exist_ok=True)
+
+# Run inference with a detailed instruction
+result = model.inference(
+    image_path=input_image,
+    text_instruction="Identify several points where a robot gripper could safely grasp objects on the table.",
+    output=output_image
+)
+
+# Process the results
+if result["status"] == "success":
+    print(f"✅ Successfully detected {len(result['keypoints'])} keypoints")
+    print(f"📊 Keypoints (normalized coordinates):")
+    for i, (x, y) in enumerate(result['keypoints']):
+        print(f"   Point {i+1}: ({x:.4f}, {y:.4f})")
+    print(f"🖼️ Visualization saved to: {output_image}")
+else:
+    print(f"❌ Inference failed: {result.get('error', 'Unknown error')}")
+```
+
+This example will:
+1. Initialize the RoboPoint model with GPU support
+2. Automatically pull the Docker image if needed
+3. Run inference on an image with a specific instruction
+4. Process and display the detected keypoints
+5. Save a visualization of the keypoints
+
 ## API Reference
 
 ### `robopoint(auto_pull=True)`
@@ -96,7 +140,10 @@ Runs RoboPoint inference on the provided image with the given text instruction.
 - `output` (str, optional): Path to save the output visualization
 
 **Returns:**
-- Dictionary containing the status and output information
+- Dictionary containing:
+  - `status` (str): "success" or "error"
+  - `keypoints` (list): List of (x, y) coordinate tuples, normalized between 0 and 1
+  - `raw_response` (str): Raw model response text
 
 ## Implementation Details
 
@@ -111,8 +158,52 @@ from exla.models.robopoint import robopoint
 model = robopoint(auto_pull=True)
 
 # Run inference
-model.inference(...)
+result = model.inference(
+    image_path="data/scene.jpg",
+    text_instruction="Find points where I could place small objects on the table.",
+    output="data/scene_output.jpg"
+)
 ```
+
+The GPU implementation:
+- Automatically checks for Docker availability
+- Pulls the required Docker image from our public ECR repository (`public.ecr.aws/h1f5g0k2/exla:robopoint-gpu-latest`)
+- Uses GPU acceleration through Docker containers
+- Provides real-time progress indicators during processing
+
+You can also specify a custom Docker image if you've built your own:
+
+```python
+from exla.models.robopoint import robopoint
+
+# Use a custom Docker image
+model = robopoint(docker_image="public.ecr.aws/h1f5g0k2/exla:robopoint-gpu-latest")
+
+# Run inference with the custom image
+result = model.inference(...)
+```
+
+### Building and Pushing Custom Docker Images
+
+If you need to customize the RoboPoint Docker image or create your own version, you can use the ECR push script included in the SDK:
+
+```bash
+# Navigate to the SDK directory
+cd /path/to/exla-sdk
+
+# Make the script executable
+chmod +x docker/ecr_push.sh
+
+# Push the default RoboPoint image
+./docker/ecr_push.sh push
+
+# Or push a custom version with a specific tag
+./docker/ecr_push.sh push --repository robopoint-custom --tag v1.0.0
+```
+
+The script will push the image to our public ECR repository at `public.ecr.aws/h1f5g0k2/exla`.
+
+For more details on using the ECR push script, see the [Docker README](https://github.com/exla-ai/exla-sdk/tree/main/docker) in the SDK repository.
 
 ### Jetson Implementation
 

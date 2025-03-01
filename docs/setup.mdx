@@ -1,0 +1,172 @@
+---
+title: 'Setup Guide'
+description: 'Set up your environment for using the Exla SDK'
+---
+
+# Setup Guide
+
+This guide will walk you through setting up your environment for using the Exla SDK. We'll cover installing the necessary tools, creating a virtual environment, and installing the SDK.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- Python 3.10 or later installed
+- Git installed
+- Access to the Exla SDK repository (you'll need an access token)
+
+## Step 1: Install uv
+
+First, install `uv`, a fast Python package installer and resolver that we recommend for managing dependencies:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+This will install `uv` on your system. After installation, you may need to restart your terminal or source your shell configuration file to use `uv`.
+
+## Step 2: Create a Project Directory
+
+Create a new directory for your project and navigate into it:
+
+```bash
+mkdir exla-project && cd exla-project
+```
+
+## Step 3: Create a Virtual Environment
+
+Create a Python virtual environment using `uv`. We recommend using Python 3.10 for optimal compatibility:
+
+```bash
+uv venv --python 3.10
+```
+
+This creates a virtual environment in the `.venv` directory. Activate the virtual environment:
+
+```bash
+# On Linux/macOS
+source .venv/bin/activate
+
+# On Windows
+.venv\Scripts\activate
+```
+
+## Step 4: Install the Exla SDK
+
+Install the Exla SDK directly from the GitHub repository using your access token:
+
+```bash
+uv pip install git+https://<ACCESS_TOKEN>@github.com/exla-ai/exla-sdk.git
+```
+
+Replace `<ACCESS_TOKEN>` with your actual GitHub access token that has access to the Exla SDK repository.
+
+## Step 5: Verify the Installation
+
+Create a simple test script to verify that the installation was successful:
+
+```bash
+mkdir -p tests
+```
+
+Create a file named `tests/test_import.py` with the following content:
+
+```python
+# tests/test_import.py
+import exla
+print(f"Exla SDK version: {exla.__version__}")
+print("Exla SDK installed successfully!")
+```
+
+Run the test script:
+
+```bash
+python tests/test_import.py
+```
+
+If everything is set up correctly, you should see the Exla SDK version and a success message.
+
+## Step 6: Set Up a Test Case
+
+Now let's create a test case to try out one of the models. We'll use the RoboPoint model as an example.
+
+First, create a directory for your test data:
+
+```bash
+mkdir -p data
+```
+
+Download a sample image:
+
+```bash
+# Download a sample image of a table
+wget -O data/table.jpg https://images.unsplash.com/photo-1565791380713-1756b9a05343
+```
+
+Create a test script for the RoboPoint model:
+
+```bash
+# Create a test script file
+touch tests/test_robopoint.py
+```
+
+Add the following code to `tests/test_robopoint.py`:
+
+```python
+# tests/test_robopoint.py
+from exla.models.robopoint import robopoint
+import os
+
+# Ensure output directory exists
+os.makedirs("data", exist_ok=True)
+
+# Initialize the model (automatically detects your hardware)
+print("Initializing RoboPoint model...")
+model = robopoint()
+
+# Run inference with a text instruction
+print("Running inference...")
+result = model.inference(
+    image_path="data/table.jpg",
+    text_instruction="Find a few spots where I could place a cup on the empty area of the table.",
+    output="data/table_output.png"
+)
+
+# Process the results
+if result["status"] == "success":
+    print(f"✅ Successfully detected {len(result['keypoints'])} keypoints")
+    print(f"📊 Keypoints (normalized coordinates):")
+    for i, (x, y) in enumerate(result['keypoints']):
+        print(f"   Point {i+1}: ({x:.4f}, {y:.4f})")
+    print(f"🖼️ Visualization saved to: data/table_output.png")
+else:
+    print(f"❌ Inference failed: {result.get('error', 'Unknown error')}")
+```
+
+Run the test script:
+
+```bash
+python tests/test_robopoint.py
+```
+
+This will run the RoboPoint model on the sample image and display the detected keypoints. The output image with visualized keypoints will be saved to `data/table_output.png`.
+
+## Next Steps
+
+Now that you have set up your environment and tested the Exla SDK, you can:
+
+- Explore the [Quickstart Guide](/quickstart) for more examples
+- Check out the [CLIP model documentation](/models/clip) for image-text matching
+- Try the [RoboPoint model](/models/robopoint) for keypoint affordance prediction
+- Learn about [hardware compatibility](/compatibility) for optimized performance
+
+## Troubleshooting
+
+If you encounter any issues during setup:
+
+- Make sure you're using Python 3.10 or later
+- Verify that your access token has the necessary permissions
+- Check that all dependencies are properly installed
+- For GPU implementations, ensure Docker is installed and configured with GPU support
+
+For additional help, please contact [support@exla.ai](mailto:support@exla.ai). 

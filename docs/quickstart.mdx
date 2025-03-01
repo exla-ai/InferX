@@ -169,24 +169,64 @@ Create a file named `robopoint_example.py` with the following content:
 
 ```python
 from exla.models.robopoint import robopoint
+import os
 
 # Initialize the model (automatically detects your hardware)
 model = robopoint()
 
+# Ensure output directory exists
+os.makedirs("data", exist_ok=True)
+
 # Run inference with a text instruction
-model.inference(
+result = model.inference(
     image_path="data/table.jpg",
     text_instruction="Find a few spots where I could place a cup on the empty area of the table.",
     output="data/table_output.png"
 )
 
-print("Output saved to data/table_output.png")
+# Process the results
+if result["status"] == "success":
+    print(f"✅ Successfully detected {len(result['keypoints'])} keypoints")
+    print(f"📊 Keypoints (normalized coordinates):")
+    for i, (x, y) in enumerate(result['keypoints']):
+        print(f"   Point {i+1}: ({x:.4f}, {y:.4f})")
+    print(f"🖼️ Visualization saved to: data/table_output.png")
+else:
+    print(f"❌ Inference failed: {result.get('error', 'Unknown error')}")
 ```
 
 ### 3. Run the Script
 
 ```bash
 python robopoint_example.py
+```
+
+You'll see real-time progress with animated spinners as the model loads and runs inference:
+
+```
+✨ EXLA SDK - RoboPoint Model ✨
+🔍 Device Detected: GPU
+
+⠏ [0.5s] Checking Docker availability
+✓ [0.6s] Checking Docker availability
+⠋ [1.2s] Pulling Exla Optimized RoboPoint Docker image
+✓ [4.1s] Pulling Exla Optimized RoboPoint Docker image
+
+🚀 EXLA Optimized RoboPoint - Vision-Language Keypoint Prediction
+📷 Processing image: table.jpg
+💬 Instruction: Find a few spots where I could place a cup on the empty area of the table.
+📁 Output will be saved to: data/table_output.png
+⠋ [0.0s] Running RoboPoint inference on GPU
+✓ [2.8s] Running RoboPoint inference on GPU
+
+✅ Successfully detected 5 keypoints
+📊 Keypoints (normalized coordinates):
+   Point 1: (0.4231, 0.5642)
+   Point 2: (0.6754, 0.4987)
+   Point 3: (0.5123, 0.6231)
+   Point 4: (0.3987, 0.4532)
+   Point 5: (0.7123, 0.5876)
+🖼️ Visualization saved to: data/table_output.png
 ```
 
 The model will process the image and generate an output image with keypoints visualized based on your text instruction.
