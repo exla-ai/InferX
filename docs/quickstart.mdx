@@ -172,3 +172,87 @@ Now that you've run your first model, you can explore other models in the Exla S
 - **ResNet34**: For high-accuracy image classification
 
 Check out the [Models](/models) section for detailed documentation on each model.
+
+# Exploring Example Code
+
+To help you get started quickly, we provide a repository of example code for all our models and features. These examples demonstrate real-world usage and best practices.
+
+## Setting Up the Examples Repository
+
+1. Clone the examples repository:
+```bash
+git clone https://github.com/exla-ai/exla-sdk-examples.git
+```
+
+2. Navigate to the examples directory:
+```bash
+cd exla-sdk-examples
+```
+
+3. Explore the available examples:
+```bash
+ls
+```
+
+You'll see directories for each model and feature, including:
+- `clip/` - Examples for the CLIP model
+- `deepseek_r1/` - Examples for the DeepSeek language model
+- `robopoint/` - Examples for the RoboPoint model
+- `custom_model/` - Examples for optimizing your own models
+- And more!
+
+## Running an Example
+
+Let's run a simple example using the CLIP model:
+
+1. Navigate to the CLIP examples directory:
+```bash
+cd clip
+```
+
+2. Run the example:
+```bash
+python example_clip.py
+```
+
+This will demonstrate how to use CLIP for image-text matching with sample images.
+
+## Running the RoboPoint Example
+
+For a more advanced example, try the RoboPoint model:
+
+1. Navigate to the RoboPoint examples directory:
+```bash
+cd ../robopoint
+```
+
+2. Run the example:
+```bash
+python example_robopoint.py
+```
+
+This will demonstrate how to use RoboPoint for robotic perception tasks.
+
+## Optimizing Your Own Models
+
+To see how to optimize your own custom models:
+
+1. Navigate to the custom model examples directory:
+```bash
+cd ../custom_model
+```
+
+2. Run the example:
+```bash
+python example_optimize_custom_model.py
+```
+
+This example shows how to optimize a pre-trained EfficientNet model for faster inference.
+
+## Next Steps
+
+After exploring the examples, you can:
+- Modify the examples to fit your specific use case
+- Integrate the code into your own projects
+- Learn about [advanced optimization techniques](/models/custom-models/overview)
+- Explore [hardware-specific optimizations](/compatibility)

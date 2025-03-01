@@ -1,52 +1,44 @@
 ---
 title: 'RoboPoint'
-description: 'Vision-language model for keypoint affordance prediction optimized for various devices'
+description: 'Multimodal model for robotic perception and understanding'
 ---
 
-# RoboPoint Model
+# RoboPoint
 
-The RoboPoint model is a vision-language model that predicts keypoint affordances in images based on natural language instructions. It identifies specific points in an image that correspond to the given text instruction, making it useful for robotic applications, human-robot interaction, and visual grounding tasks.
+RoboPoint is a powerful multimodal model optimized for robotic perception and understanding. It combines visual and language capabilities to enable robots to understand their environment and follow instructions.
 
-## Features
+## Environment Setup
 
-- **Hardware-Optimized**: Automatically detects your hardware and uses the appropriate implementation:
-  - **Jetson Devices** (Orin Nano, AGX Orin): Optimized implementation for Jetson platforms
-  - **Standard GPUs**: GPU-accelerated implementation using Docker
-  - **CPU-only Systems**: Optimized CPU implementation
-  
-- **Natural Language Interface**: Control keypoint prediction through simple text instructions
-  
-- **Visualization**: Automatically visualizes predicted keypoints on the input image
+Before using RoboPoint, you need to set up your environment:
 
-## Installation
+1. First, install the Exla SDK by following the [installation instructions](/quickstart)
 
-The RoboPoint model is included in the Exla SDK. No separate installation is required.
+2. Clone the examples repository:
+```bash
+git clone https://github.com/exla-ai/exla-sdk-examples.git
+```
+
+3. Navigate to the RoboPoint example directory:
+```bash
+cd exla-sdk-examples/robopoint
+```
+
+## Running RoboPoint
+
+You can run the RoboPoint example with a single command:
 
 ```bash
-pip install exla-sdk
+python example_robopoint.py
 ```
 
-For GPU implementation, Docker is required as the model runs in a containerized environment. The SDK will automatically pull the required Docker image from our public ECR repository.
+This will:
+1. Load the optimized RoboPoint model
+2. Process sample images
+3. Demonstrate multimodal capabilities
 
-## Basic Usage
+## Example Code
 
-```python
-from exla.models.robopoint import robopoint
-
-# Initialize the model (automatically detects your hardware)
-model = robopoint()
-
-# Run inference with a text instruction
-model.inference(
-    image_path="path/to/image.jpg",
-    text_instruction="Find a few spots within the vacant area on the table.",
-    output="path/to/output.png"
-)
-```
-
-## Examples
-
-### Finding Spots in a Sink
+Here's a simplified version of how to use RoboPoint in your own projects:
 
 ```python
 from exla.models.robopoint import robopoint
@@ -57,188 +49,27 @@ model.inference(
     image_path="data/sink.jpg",
     text_instruction="Find a few spots within the vacant area on the rightmost white plate.",
     output="data/sink_output.png"
-)
+)   
 ```
 
-### Identifying Places on Stairs
+## Key Features
 
-```python
-from exla.models.robopoint import robopoint
+- **Multimodal Understanding**: Combines vision and language for comprehensive scene understanding
+- **Object Detection**: Identifies and localizes objects in the environment
+- **Instruction Following**: Interprets natural language instructions in the context of visual scenes
+- **Spatial Reasoning**: Understands spatial relationships between objects
+- **Hardware Optimized**: Runs efficiently on NVIDIA GPUs
 
-model = robopoint()
+## Use Cases
 
-model.inference(
-    image_path="data/stair.jpg",
-    text_instruction="Identify several places in the unoccupied space on the stair in the middle.",
-    output="data/stair_output.png"
-)
-```
+- **Robotic Manipulation**: Identify objects for grasping and manipulation
+- **Navigation**: Understand the environment for safe navigation
+- **Human-Robot Interaction**: Follow natural language instructions
+- **Scene Understanding**: Analyze complex scenes and relationships between objects
 
-### Comprehensive GPU Example
 
-This example demonstrates how to use the RoboPoint model with GPU acceleration, including handling the Docker image and processing the results:
+## Next Steps
 
-```python
-from exla.models.robopoint import robopoint
-import os
-
-# Initialize the model with GPU support
-# This will automatically pull the Docker image if needed
-model = robopoint(auto_pull=True)
-
-# Define paths
-input_image = "data/robot_workspace.jpg"
-output_image = "data/robot_workspace_keypoints.jpg"
-
-# Ensure output directory exists
-os.makedirs(os.path.dirname(output_image), exist_ok=True)
-
-# Run inference with a detailed instruction
-result = model.inference(
-    image_path=input_image,
-    text_instruction="Identify several points where a robot gripper could safely grasp objects on the table.",
-    output=output_image
-)
-
-# Process the results
-if result["status"] == "success":
-    print(f"✅ Successfully detected {len(result['keypoints'])} keypoints")
-    print(f"📊 Keypoints (normalized coordinates):")
-    for i, (x, y) in enumerate(result['keypoints']):
-        print(f"   Point {i+1}: ({x:.4f}, {y:.4f})")
-    print(f"🖼️ Visualization saved to: {output_image}")
-else:
-    print(f"❌ Inference failed: {result.get('error', 'Unknown error')}")
-```
-
-This example will:
-1. Initialize the RoboPoint model with GPU support
-2. Automatically pull the Docker image if needed
-3. Run inference on an image with a specific instruction
-4. Process and display the detected keypoints
-5. Save a visualization of the keypoints
-
-## API Reference
-
-### `robopoint(auto_pull=True)`
-
-Factory function that returns the appropriate RoboPoint model based on the detected hardware.
-
-**Parameters:**
-- `auto_pull` (bool): Whether to automatically pull the Docker image if using GPU implementation (default: True)
-
-**Returns:**
-- A RoboPoint model instance optimized for the detected hardware
-
-### `model.inference(image_path, text_instruction=None, output=None)`
-
-Runs RoboPoint inference on the provided image with the given text instruction.
-
-**Parameters:**
-- `image_path` (str): Path to the input image
-- `text_instruction` (str, optional): Language instruction for the model (default: "Find keypoints in the image")
-- `output` (str, optional): Path to save the output visualization
-
-**Returns:**
-- Dictionary containing:
-  - `status` (str): "success" or "error"
-  - `keypoints` (list): List of (x, y) coordinate tuples, normalized between 0 and 1
-  - `raw_response` (str): Raw model response text
-
-## Implementation Details
-
-### GPU Implementation
-
-For systems with NVIDIA GPUs, RoboPoint uses a Docker-based implementation for optimal performance:
-
-```python
-from exla.models.robopoint import robopoint
-
-# Initialize with auto_pull=True to automatically download the Docker image
-model = robopoint(auto_pull=True)
-
-# Run inference
-result = model.inference(
-    image_path="data/scene.jpg",
-    text_instruction="Find points where I could place small objects on the table.",
-    output="data/scene_output.jpg"
-)
-```
-
-The GPU implementation:
-- Automatically checks for Docker availability
-- Pulls the required Docker image from our public ECR repository (`public.ecr.aws/h1f5g0k2/exla:robopoint-gpu-latest`)
-- Uses GPU acceleration through Docker containers
-- Provides real-time progress indicators during processing
-
-You can also specify a custom Docker image if you've built your own:
-
-```python
-from exla.models.robopoint import robopoint
-
-# Use a custom Docker image
-model = robopoint(docker_image="public.ecr.aws/h1f5g0k2/exla:robopoint-gpu-latest")
-
-# Run inference with the custom image
-result = model.inference(...)
-```
-
-### Building and Pushing Custom Docker Images
-
-If you need to customize the RoboPoint Docker image or create your own version, you can use the ECR push script included in the SDK:
-
-```bash
-# Navigate to the SDK directory
-cd /path/to/exla-sdk
-
-# Make the script executable
-chmod +x docker/ecr_push.sh
-
-# Push the default RoboPoint image
-./docker/ecr_push.sh push
-
-# Or push a custom version with a specific tag
-./docker/ecr_push.sh push --repository robopoint-custom --tag v1.0.0
-```
-
-The script will push the image to our public ECR repository at `public.ecr.aws/h1f5g0k2/exla`.
-
-For more details on using the ECR push script, see the [Docker README](https://github.com/exla-ai/exla-sdk/tree/main/docker) in the SDK repository.
-
-### Jetson Implementation
-
-For Jetson devices (Orin Nano, AGX Orin), RoboPoint uses a specialized implementation optimized for the Jetson platform:
-
-```python
-from exla.models.robopoint import robopoint
-
-# The factory function automatically detects Jetson devices
-model = robopoint()
-
-# Run inference with Jetson optimizations
-model.inference(...)
-```
-
-### CPU Implementation
-
-For systems without GPUs, RoboPoint falls back to a CPU implementation:
-
-```python
-from exla.models.robopoint import robopoint
-
-# The factory function automatically detects CPU-only systems
-model = robopoint()
-
-# Run inference on CPU
-model.inference(...)
-```
-
-## Performance Considerations
-
-The performance of RoboPoint varies based on the hardware:
-
-- **GPU Implementation**: Fastest performance, recommended for production use
-- **Jetson Implementation**: Optimized for edge deployment on NVIDIA Jetson devices
-- **CPU Implementation**: Slower but works on any system without specialized hardware
-
-For best performance on GPU systems, ensure Docker is properly configured with GPU support. 
+- Explore the [full example code](https://github.com/exla-ai/exla-sdk-examples/tree/main/robopoint)
+- Learn about [optimizing your own models](/models/custom-models/overview)
+- Check out other [multimodal models](/models/clip) 
