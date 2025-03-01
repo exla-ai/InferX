@@ -1,0 +1,225 @@
+# Segment Anything 2 (SAM2)
+
+The Segment Anything 2 (SAM2) model is a foundation model for promptable visual segmentation in images and videos. This implementation provides an optimized version of SAM2 for NVIDIA Jetson devices.
+
+## Features
+
+- **TensorRT Optimization**: Accelerated inference using NVIDIA TensorRT
+- **Multiple Input Types**: Support for image files, video files, and numpy arrays
+- **Custom Prompts**: Specify points or boxes to guide segmentation
+- **Camera Stream Support**: Process live video from cameras or RTSP streams
+
+## Installation
+
+The SAM2 model is included in the EXLA SDK. To use it, you need to download the model weights:
+
+```bash
+# Create the cache directory if it doesn't exist
+mkdir -p ~/.cache/exla/sam2/
+
+# Download the SAM2 model
+wget -O ~/.cache/exla/sam2/sam2_b.pth https://huggingface.co/facebook/sam2-base/resolve/main/sam2_b.pth
+```
+
+## Basic Usage
+
+```python
+from exla.models.sam2 import sam2
+
+# Initialize the model
+model = sam2()
+
+# Run inference on an image
+result = model.inference(
+    input="path/to/image.jpg",
+    output="path/to/output_dir"
+)
+
+print(f"Inference result: {result['status']}")
+```
+
+## Input Types
+
+SAM2 supports multiple input types:
+
+### File Paths
+
+```python
+# Image file
+result = model.inference(
+    input="path/to/image.jpg",
+    output="path/to/output_dir"
+)
+
+# Video file
+result = model.inference(
+    input="path/to/video.mp4",
+    output="path/to/output_dir"
+)
+```
+
+### Numpy Arrays
+
+You can directly pass numpy arrays to the model:
+
+```python
+import cv2
+import numpy as np
+
+# Load image as numpy array
+image = cv2.imread("path/to/image.jpg")
+
+# Run inference with numpy array
+result = model.inference(
+    input=image,
+    output="path/to/output_dir",
+    prompt={"points": [[x, y]], "labels": [1]}
+)
+```
+
+## Prompts
+
+You can guide the segmentation by providing custom prompts:
+
+### Point Prompts
+
+```python
+# Define point prompts
+result = model.inference(
+    input="path/to/image.jpg",
+    output="path/to/output_dir",
+    prompt={"points": [[100, 100], [200, 200]], "labels": [1, 0]}  # 1=foreground, 0=background
+)
+```
+
+### Box Prompts
+
+```python
+# Define box prompt [x1, y1, x2, y2]
+result = model.inference(
+    input="path/to/image.jpg",
+    output="path/to/output_dir",
+    prompt={"box": [100, 100, 400, 400]}
+)
+```
+
+## Processing Results
+
+The model returns a dictionary with the following keys:
+
+- `status`: Success or error status
+- `processing_time`: Time taken for inference (in seconds)
+- `masks`: List of segmentation masks (when using numpy arrays as input)
+
+When using numpy arrays as input, you can process the masks directly:
+
+```python
+if result['status'] == 'success' and 'masks' in result:
+    masks = result['masks']
+    for mask in masks:
+        # Process each mask
+        # mask is a binary array where True/1 indicates the segmented object
+        pass
+```
+
+## Example: Visualizing Masks
+
+Here's how to create a visualization by overlaying a mask on the original image:
+
+```python
+def overlay_mask_on_image(original_image, mask, alpha=0.5, color=(255, 0, 0)):
+    """
+    Overlay a binary mask on the original image.
+    
+    Args:
+        original_image (numpy.ndarray): The original image
+        mask (numpy.ndarray): The binary mask
+        alpha (float): Transparency factor (0-1)
+        color (tuple): BGR color for the mask overlay (blue by default)
+    
+    Returns:
+        numpy.ndarray: Image with mask overlay
+    """
+    # Convert mask to uint8 if it's boolean
+    if mask.dtype == bool:
+        mask = mask.astype(np.uint8)
+    
+    # Resize mask if dimensions don't match the original image
+    if mask.shape[:2] != original_image.shape[:2]:
+        mask = cv2.resize(mask, (original_image.shape[1], original_image.shape[0]), 
+                         interpolation=cv2.INTER_NEAREST)
+    
+    # Create a colored mask
+    colored_mask = np.zeros_like(original_image)
+    colored_mask[mask > 0] = color
+    
+    # Blend the original image with the colored mask
+    overlay = cv2.addWeighted(original_image, 1, colored_mask, alpha, 0)
+    return overlay
+```
+
+## Complete Example
+
+The EXLA SDK includes a complete example script `examples/sam2/example_sam2.py` that demonstrates:
+
+1. Using point prompts with an image file
+2. Using box prompts with a video file
+3. Using numpy arrays as input with point prompts
+
+### Running the Example
+
+```bash
+# Run all examples
+python examples/sam2/example_sam2.py
+
+# Or run specific examples by editing the script and uncommenting the desired functions
+```
+
+### Example Output
+
+The example script generates the following outputs:
+
+- For image processing: Segmentation masks and overlays in `data/output_truck/`
+- For video processing: Segmented video and frames in `data/output_f1/`
+- For numpy array processing:
+  - Original masks: `data/output_numpy/mask_*_original.png`
+  - Resized masks: `data/output_numpy/mask_*_resized.png`
+  - Overlay images: `data/output_numpy/overlay_*.png`
+
+## Camera Stream Processing
+
+Process live video from a camera or RTSP stream:
+
+```python
+# Process camera stream (camera index 0)
+result = model.inference_camera(
+    camera_source=0,
+    output="camera_output.mp4",
+    max_frames=300,  # Process 300 frames
+    fps=30,
+    display=True  # Show live preview
+)
+```
+
+## Advanced Usage
+
+For advanced usage, you can get direct access to the underlying model:
+
+```python
+# Get direct access to the SAM model
+sam_model = model.get_model()
+
+# Get direct access to the predictor
+predictor = model.get_predictor()
+```
+
+## Performance Considerations
+
+- The model returns masks at a fixed size (256x256), which need to be resized to match the original image dimensions
+- For best performance, use appropriate image sizes (large images may require more memory and processing time)
+- When processing videos, consider the frame rate and resolution to balance quality and performance
+
+## References
+
+- [SAM 2: Segment Anything in Images and Videos](https://ai.meta.com/research/publications/segment-anything-in-images-and-videos/)
+- [SAM 2 Github Repository](https://github.com/facebookresearch/sam2/) 

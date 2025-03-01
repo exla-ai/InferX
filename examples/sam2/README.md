@@ -44,6 +44,27 @@ python example_sam2.py --mode video
 
 This will process the video and save the results to the `data/output_f1/` directory.
 
+### Using Numpy Arrays as Input
+
+The SAM2 model also supports using numpy arrays directly as input. This is demonstrated in the `example_sam2.py` script:
+
+```bash
+python example_sam2.py
+```
+
+This example shows:
+1. How to load an image as a numpy array
+2. How to pass the numpy array to the SAM2 model
+3. How to process the segmentation masks returned by the model
+4. How to create overlay visualizations by combining the original image with the masks
+
+The example includes three different use cases:
+- Example 1: Using point prompts with an image file
+- Example 2: Using box prompts with a video file
+- Example 3: Using point prompts with a numpy array
+
+You can run individual examples by uncommenting the corresponding function calls at the end of the script.
+
 ### Live Camera Feed
 
 To process a live camera feed:
