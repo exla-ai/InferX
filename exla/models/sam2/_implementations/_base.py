@@ -14,7 +14,6 @@ class SAM2_Base:
         Returns:
             dict: Results from the segmentation
         """
-        print(f"Running inference on {self.__class__.__name__}")
         return {"status": "success"}
         
     def inference_image(self, input, output=None, prompt=None):
@@ -29,7 +28,6 @@ class SAM2_Base:
         Returns:
             dict: Results from the segmentation
         """
-        print(f"Running image inference on {self.__class__.__name__}")
         return {"status": "success"}
         
     def inference_video(self, input, output=None, prompt=None):
@@ -44,5 +42,4 @@ class SAM2_Base:
         Returns:
             dict: Results from the segmentation
         """
-        print(f"Running video inference on {self.__class__.__name__}")
         return {"status": "success"} 

@@ -49,8 +49,6 @@ class SAM2_GPU(SAM2_Base):
     def _start_server(self):
         """Start the SAM2 server using Docker."""
         try:
-            print(f"Starting SAM2 server on port {self._port}...")
-            
             # Check if Docker is available
             subprocess.run(["docker", "--version"], check=True, stdout=subprocess.PIPE)
             
@@ -69,7 +67,6 @@ class SAM2_GPU(SAM2_Base):
             
             # Wait for the server to start
             time.sleep(5)
-            print("SAM2 server started successfully")
             
         except Exception as e:
             raise RuntimeError(f"Failed to start SAM2 server: {str(e)}")
@@ -81,9 +78,7 @@ class SAM2_GPU(SAM2_Base):
             
             # Test connection to server
             response = requests.get(f"http://localhost:{self._port}/health")
-            if response.status_code == 200:
-                print("Connected to SAM2 server successfully")
-            else:
+            if response.status_code != 200:
                 raise RuntimeError(f"Server returned status code: {response.status_code}")
                 
         except Exception as e:
@@ -191,7 +186,7 @@ class SAM2_GPU(SAM2_Base):
             print(f"\n❌ Error running SAM2 inference: {e}")
             return {"status": "error", "error": str(e)}
             
-    def inference_image(self, input, output=None, prompt=None):
+    def inference_image(self, input, output=None, prompt=None, show_visualization=False):
         """
         Run inference on an image with the SAM2 model.
         
@@ -199,26 +194,17 @@ class SAM2_GPU(SAM2_Base):
             input (str): Path to input image
             output (str, optional): Path to save the output image
             prompt (dict, optional): Prompt for the model (points, boxes, etc.)
+            show_visualization (bool, optional): Whether to show visualization masks
             
         Returns:
             dict: Results from the segmentation
         """
         try:
-            print("\n🚀 Starting Exla SAM2 Server Image Inference Pipeline\n")
-            
             result = self._process_image(input, output, prompt)
-            
-            print(f"\n✨ SAM2 Image Inference Summary:")
-            print(f"  - Input: {input}")
-            if output:
-                print(f"  - Output: {output}")
-            if "masks" in result:
-                print(f"  - Masks generated: {len(result['masks'])}")
             
             return result
             
         except Exception as e:
-            print(f"\n❌ Error running SAM2 image inference: {e}")
             return {"status": "error", "error": str(e)}
             
     def inference_video(self, input, output=None, prompt=None):
@@ -238,8 +224,6 @@ class SAM2_GPU(SAM2_Base):
             import numpy as np
             import tempfile
             
-            print("\n🚀 Starting Exla SAM2 Server Video Inference Pipeline\n")
-            
             # Open the video
             cap = cv2.VideoCapture(input)
             if not cap.isOpened():
@@ -251,32 +235,28 @@ class SAM2_GPU(SAM2_Base):
             fps = cap.get(cv2.CAP_PROP_FPS)
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
-            print(f"Video properties: {width}x{height}, {fps} fps, {total_frames} frames")
-            
-            # Create output video writer if output is specified
+            # Create output video writer if output path is provided
             if output:
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 out = cv2.VideoWriter(output, fourcc, fps, (width, height))
+            else:
+                out = None
             
             # Process each frame
             frame_count = 0
             all_masks = []
             
-            print("Processing video frames...")
             while True:
                 ret, frame = cap.read()
                 if not ret:
                     break
                     
-                frame_count += 1
-                print(f"Processing frame {frame_count}/{total_frames}")
-                
                 # Save frame to temporary file
                 with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp:
                     temp_path = temp.name
                     cv2.imwrite(temp_path, frame)
                 
-                # Process the frame
+                # Process frame
                 result = self._process_image(temp_path, None, prompt)
                 
                 # Remove temporary file
@@ -286,35 +266,35 @@ class SAM2_GPU(SAM2_Base):
                 if "masks" in result:
                     all_masks.append(result["masks"])
                 
-                # Create visualization if output is specified
-                if output and "masks" in result:
-                    # Convert masks to numpy arrays
-                    masks = [np.array(mask) for mask in result["masks"]]
+                # Write output frame if output path is provided
+                if out and "masks" in result:
+                    # Create mask overlay
+                    mask_overlay = np.zeros_like(frame)
                     
-                    # Create a visualization of the masks
-                    mask_image = np.zeros_like(frame)
-                    for i, mask in enumerate(masks):
-                        color = np.random.randint(0, 255, size=3)
-                        mask_image[mask] = color
+                    for i, mask in enumerate(result["masks"]):
+                        # Convert mask to numpy array if it's a list
+                        if isinstance(mask, list):
+                            mask = np.array(mask)
+                        
+                        # Resize mask if needed
+                        if mask.shape[0] != height or mask.shape[1] != width:
+                            mask_resized = cv2.resize(mask.astype(np.uint8), (width, height), interpolation=cv2.INTER_NEAREST)
+                            mask = mask_resized > 0
+                        
+                        # Generate random color for mask
+                        color = np.random.randint(0, 255, size=3).tolist()
+                        mask_overlay[mask] = color
                     
                     # Blend with original frame
-                    result_frame = cv2.addWeighted(frame, 0.7, mask_image, 0.3, 0)
-                    
-                    # Write to output video
-                    out.write(result_frame)
+                    output_frame = cv2.addWeighted(frame, 0.7, mask_overlay, 0.3, 0)
+                    out.write(output_frame)
+                
+                frame_count += 1
             
             # Release resources
             cap.release()
-            if output:
+            if out:
                 out.release()
-                
-            print(f"\n✨ SAM2 Video Inference Summary:")
-            print(f"  - Input: {input}")
-            if output:
-                print(f"  - Output: {output}")
-            print(f"  - Frames processed: {frame_count}")
-            if all_masks:
-                print(f"  - Average masks per frame: {sum(len(m) for m in all_masks) / len(all_masks) if all_masks else 0:.2f}")
             
             return {
                 "status": "success",
@@ -323,15 +303,12 @@ class SAM2_GPU(SAM2_Base):
             }
             
         except Exception as e:
-            print(f"\n❌ Error running SAM2 video inference: {e}")
             return {"status": "error", "error": str(e)}
             
     def __del__(self):
         """Cleanup when the object is destroyed."""
         try:
-            print("\nCleaning up SAM2 server...")
             subprocess.run(["docker", "rm", "-f", self._container_name], 
                           stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-            print("SAM2 server stopped")
         except:
             pass 

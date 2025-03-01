@@ -4,7 +4,6 @@ RoboPoint model implementation for GPU.
 
 import os
 import sys
-import logging
 import subprocess
 import tempfile
 import json
@@ -13,12 +12,9 @@ import time
 import threading
 import itertools
 from typing import Dict, List, Optional, Tuple, Union, Any
-from PIL import Image
 
 from ._base import Robopoint_Base
-import torch
 
-logger = logging.getLogger(__name__)
 
 # Default Docker Hub repository for the RoboPoint image
 DEFAULT_DOCKER_REPO = "viraatdas/robopoint-gpu"

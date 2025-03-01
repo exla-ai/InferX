@@ -157,7 +157,7 @@ class SAM2_CPU(SAM2_Base):
             print(f"\n❌ Error running SAM2 inference: {e}")
             return {"status": "error", "error": str(e)}
             
-    def inference_image(self, input, output=None, prompt=None):
+    def inference_image(self, input, output=None, prompt=None, show_visualization=False):
         """
         Run inference on an image with the SAM2 model.
         
@@ -165,25 +165,17 @@ class SAM2_CPU(SAM2_Base):
             input (str): Path to input image
             output (str, optional): Path to save the output image
             prompt (dict, optional): Prompt for the model (points, boxes, etc.)
+            show_visualization (bool, optional): Whether to show visualization masks
             
         Returns:
             dict: Results from the segmentation
         """
         try:
-            print("\n🚀 Starting Exla SAM2 Image Inference Pipeline\n")
-            
             result = self._process_image(input, output, prompt)
-            
-            print(f"\n✨ SAM2 Image Inference Summary:")
-            print(f"  - Input: {input}")
-            if output:
-                print(f"  - Output: {output}")
-            print(f"  - Masks generated: {len(result['masks'])}")
             
             return result
             
         except Exception as e:
-            print(f"\n❌ Error running SAM2 image inference: {e}")
             return {"status": "error", "error": str(e)}
             
     def inference_video(self, input, output=None, prompt=None):

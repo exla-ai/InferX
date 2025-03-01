@@ -77,29 +77,27 @@ class SAM2_Jetson(SAM2_Base):
     """
     def __init__(self, model_name="sam2_b", server_url="http://localhost:8000/predict"):
         """
-        Initializes SAM2 model on Jetson with TensorRT optimizations.
+        Initialize the SAM2 model for Jetson devices.
         
         Args:
             model_name (str): Name of the SAM2 model to use
-            server_url (str): URL of the SAM2 prediction server
+            server_url (str): URL of the SAM2 server
         """
         super().__init__()
-        # Convert model name format if needed (SAM2 uses different naming convention)
-        # SAM2 models are named: "sam2_b", "sam2_l", "sam2_h" (base, large, huge)
-        if model_name == "sam2_b":
+        
+        # Set model name and checkpoint name based on input
+        if model_name == "sam2_b" or model_name == "b":
             self.model_name = "sam2_b"
             self.checkpoint_name = "sam2_b.pth"
-        elif model_name == "sam2_l":
+        elif model_name == "sam2_l" or model_name == "l":
             self.model_name = "sam2_l"
             self.checkpoint_name = "sam2_l.pth"
-        elif model_name == "sam2_h":
+        elif model_name == "sam2_h" or model_name == "h":
             self.model_name = "sam2_h"
             self.checkpoint_name = "sam2_h.pth"
         else:
-            # Default to base model
             self.model_name = "sam2_b"
             self.checkpoint_name = "sam2_b.pth"
-            print(f"Warning: Unknown model name '{model_name}', defaulting to 'sam2_b'")
             
         self.server_url = server_url
         self.model = None
@@ -115,11 +113,9 @@ class SAM2_Jetson(SAM2_Base):
         try:
             # Try to connect to server
             response = requests.get(self.server_url.replace("/predict", ""), timeout=1)
-            print(f"✓ Connected to SAM2 server at {self.server_url}")
         except Exception as e:
             # If server not available, use local model
             self.use_server = False
-            print(f"Server not available ({str(e)}), using local model")
             self._install_dependencies()
             self._load_model()
         
@@ -168,7 +164,6 @@ class SAM2_Jetson(SAM2_Base):
             try:
                 from segment_anything_2 import sam2_model_registry, Sam2Predictor
             except ImportError:
-                print("Could not import segment_anything_2. Installing...")
                 subprocess.run([
                     "uv", "pip", "install", "git+https://github.com/facebookresearch/segment-anything-2.git"
                 ], check=True)
@@ -178,20 +173,14 @@ class SAM2_Jetson(SAM2_Base):
             checkpoint_path = self.cache_dir / f"{self.checkpoint_name}"
             
             if not checkpoint_path.exists():
-                print(f"⚠️ Model not found at {checkpoint_path}.")
-                print(f"Please download the SAM2 model file ({self.checkpoint_name}) and place it in {self.cache_dir}")
-                print("You can download the model from: https://github.com/facebookresearch/segment-anything-2#model-checkpoints")
-                
                 # Create a fallback path to check in the Docker mount location
                 docker_path = Path("/tmp/nv_jetson_model/sam2") / f"{self.checkpoint_name}"
                 if docker_path.exists():
-                    print(f"✓ Found model at Docker mount path: {docker_path}")
                     checkpoint_path = docker_path
                 else:
                     raise RuntimeError(f"Model file not found. Please download it to {self.cache_dir} or {docker_path}")
             
             # Load model
-            print(f"Loading SAM2 model from: {checkpoint_path}")
             # SAM2 model registry uses different keys than the original SAM
             # Convert model name to registry key if needed
             model_registry_key = self.model_name.replace("sam2_", "")  # Convert "sam2_b" to "b"
@@ -200,11 +189,9 @@ class SAM2_Jetson(SAM2_Base):
             
             # Create predictor
             self.predictor = Sam2Predictor(self.sam)
-            print(f"✓ Loaded SAM2 model: {self.model_name}")
             
         except Exception as e:
-            print(f"❌ Error loading SAM2 model: {str(e)}")
-            raise
+            raise RuntimeError(f"Error loading SAM2 model: {str(e)}")
     
     def show_mask(self, mask, ax, random_color=False, borders=True):
         """
@@ -296,7 +283,6 @@ class SAM2_Jetson(SAM2_Base):
         # Read and verify image
         image = Image.open(image_path).convert("RGB")
         if image.size != (1800, 1200):
-            print(f"Resizing image from {image.size} to (1800, 1200)")
             image = image.resize((1800, 1200))
         
         # Prepare image for sending
@@ -306,7 +292,6 @@ class SAM2_Jetson(SAM2_Base):
         
         # Send request to server
         files = {'file': ('image.png', img_byte_arr, 'image/png')}
-        print("Sending request to server...")
         response = requests.post(self.server_url, files=files)
         
         if response.status_code != 200:
@@ -314,14 +299,10 @@ class SAM2_Jetson(SAM2_Base):
         
         # Process response
         result = response.json()
-        print("Got response from server")
         
         # Extract masks and scores
         masks = np.array(result['low_res_masks'])
         scores = np.array(result['iou_predictions'])
-        
-        print(f"Raw masks shape: {masks.shape}")
-        print(f"Raw scores shape: {scores.shape}")
         
         # Convert masks to boolean
         masks = (masks > 0.0)
@@ -335,7 +316,6 @@ class SAM2_Jetson(SAM2_Base):
         point_coords = torch.tensor([[500, 375]])
         point_labels = torch.tensor([1])
         
-        print(f"Processed {len(masks)} masks")
         return masks, scores, point_coords, point_labels
     
     def visualize_masks(self, image, masks, scores, point_coords, point_labels, output_dir=None, prefix="Torch-TRT"):
@@ -368,13 +348,10 @@ class SAM2_Jetson(SAM2_Base):
         # Determine output path
         base_path = output_dir if output_dir else "."
         
-        print(f"Visualizing {len(masks)} masks")
-        
         # Process each mask
         for i, (mask, score) in enumerate(zip(masks, scores)):
             # Resize mask to match image dimensions if needed
             if mask.shape[0] != image_h or mask.shape[1] != image_w:
-                print(f"Resizing mask from {mask.shape} to ({image_h}, {image_w})")
                 mask = self.resize_mask(mask, (image_w, image_h))
             
             # Create direct overlay with OpenCV
@@ -388,7 +365,6 @@ class SAM2_Jetson(SAM2_Base):
             # Save the direct overlay
             direct_overlay_path = os.path.join(base_path, f"{prefix}_direct_overlay_{i+1}.png")
             cv2.imwrite(direct_overlay_path, cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
-            print(f"Saved direct overlay to {direct_overlay_path}")
             
             # Create matplotlib visualization
             plt.figure(figsize=(10, 10))
@@ -406,10 +382,8 @@ class SAM2_Jetson(SAM2_Base):
             output_path = os.path.join(base_path, f"{prefix}_output_mask_{i+1}.png")
             plt.savefig(output_path, bbox_inches='tight', pad_inches=0, dpi=200)
             plt.close()
-            
-            print(f"Saved mask {i+1} to {output_path}")
     
-    def inference_image(self, input_path, output_path=None, prompt=None):
+    def inference_image(self, input_path, output_path=None, prompt=None, show_visualization=False):
         """
         Run inference on a single image.
         
@@ -417,6 +391,7 @@ class SAM2_Jetson(SAM2_Base):
             input_path (str): Path to input image
             output_path (str, optional): Path to save visualization
             prompt (dict, optional): Prompt containing points or box
+            show_visualization (bool, optional): Whether to show visualization masks
             
         Returns:
             dict: Results containing masks and scores
@@ -477,8 +452,8 @@ class SAM2_Jetson(SAM2_Base):
                     else:
                         raise ValueError("Invalid prompt format. Must contain 'points' or 'box'.")
             
-            # Create visualizations if output path is provided
-            if output_path:
+            # Create visualizations if output path is provided and show_visualization is True
+            if output_path and show_visualization:
                 # Determine if output_path is a directory
                 if os.path.isdir(output_path) or not os.path.splitext(output_path)[1]:
                     # It's a directory
@@ -542,7 +517,6 @@ class SAM2_Jetson(SAM2_Base):
             }
                 
         except Exception as e:
-            print(f"❌ Error during inference: {str(e)}")
             return {
                 "status": "error",
                 "error": str(e)
