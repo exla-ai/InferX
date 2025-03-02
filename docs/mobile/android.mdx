@@ -1,0 +1,77 @@
+---
+title: "Android SDK"
+description: "Run AI models locally on Android devices"
+---
+
+# Running AI Models Locally on Android
+
+This guide explains how to run AI models locally on your Android device using the Exla SDK.
+
+## Supported Models
+
+- **Whisper** (speech-to-text)
+- **LLaMA** (chatbot)
+- **Mistral** (chatbot)
+
+## Installation
+
+To use this library, add it to your Android project:
+
+```gradle
+dependencies {
+    implementation 'com.exla:ai-models:1.0.0'
+}
+```
+
+Make sure to include JNI support if needed.
+
+## 1. Running Whisper (Speech-to-Text)
+
+Convert speech to text locally without an internet connection.
+
+
+### Model Setup
+
+## 1. Whisper
+
+```kotlin
+import com.exla.models.Whisper
+
+val whisper = Whisper(modelPath = "tiny.en")
+
+val result = whisper.transcribe(audioPath = "recording.wav")
+println(result)  // Outputs: "Hello, how are you?"
+```
+
+
+
+## 2. Running LLaMA (Chatbot)
+
+Interact with a lightweight LLaMA-based chatbot.
+
+### API Usage
+
+```kotlin
+import com.exla.models.LlamaChat
+
+val chat = LlamaChat(modelPath = "llama-3.2_3B")
+
+val response = chat.generate("What is AI?")
+println(response)
+```
+
+## Running the Models
+
+After setting up the models, run your app and call:
+
+```kotlin
+val response = chat.generate("Explain neural networks.")
+println(response)
+```
+
+OR for speech-to-text:
+
+```kotlin
+val text = whisper.transcribe("audio.wav")
+println(text)
+```
