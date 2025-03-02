@@ -1,0 +1,5 @@
+[submodule "exla-sdk-examples"]
+    path = exla-sdk-examples
+    url = https://github.com/exla-ai/exla-sdk-examples
+    ignore = all
+
