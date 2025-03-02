@@ -21,14 +21,11 @@ Deepseek is a state-of-the-art language model that can be used for a variety of 
 Here's a simple example of how to use the Deepseek model for text generation:
 
 ```python
-from exla.models.deepseek_r1 import DeepseekR1
+from exla.models.deepseek_r1 import deepseek_r1
 
-# Initialize the model
-model = DeepseekR1()
+model = deepseek_r1()
 
-# Generate text
-response = model.generate("Explain how neural networks work in simple terms.")
-print(response)
+model.run()
 ```
 
 ## Parameters
