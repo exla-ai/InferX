@@ -14,5 +14,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["exla"]
 
+[tool.hatch.build.targets.sdist]
+only-include = ["exla"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [project.urls]
-repository = "https://github.com/exla-ai/exla-sdk" 
+repository = "https://github.com/exla-ai/exla-sdk"
