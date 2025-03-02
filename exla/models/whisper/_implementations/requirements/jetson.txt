@@ -1,4 +1,0 @@
-numpy>=1.20.0
-tqdm>=4.65.0
-soundfile>=0.12.1
-tensorrt>=8.5.0 
