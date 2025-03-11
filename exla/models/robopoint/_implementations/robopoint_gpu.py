@@ -5,45 +5,60 @@ RoboPoint model implementation for GPU.
 import os
 import sys
 import subprocess
-import tempfile
-import json
-import shutil
 import time
 import threading
 import itertools
 import logging
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Dict, Any
+import requests
+import io
+import base64
+import re
+import json
+from PIL import Image, ImageDraw
 
 from ._base import Robopoint_Base
+from .helpers import conv_templates
+from .helpers import DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 
 
 # Default Docker Hub repository for the RoboPoint image
-DEFAULT_DOCKER_REPO = "public.ecr.aws/h1f5g0k2/exla:robopoint-gpu-latest"
+DEFAULT_DOCKER_REPO = "public.ecr.aws/h1f5g0k2/exla:robopoint-v2-gpu-latest"
 
-
+# Create logger but don't configure it yet
 logger = logging.getLogger(__name__)
+
+# Configure logging with minimal format (message only)
+logging.basicConfig(
+    level=logging.WARNING,  # Default level
+    format='%(message)s'    # Only show the message, no prefixes
+)
+
 
 class ProgressIndicator:
     """
-    A simple spinner progress indicator with timing information.
+    A simple spinner progress indicator with timing information that respects logging levels.
     """
-    def __init__(self, message):
+    def __init__(self, message, logger=None):
         self.message = message
         self.start_time = time.time()
         self._spinner_cycle = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
         self._stop_event = threading.Event()
         self._thread = None
+        self.logger = logger or logging.getLogger(__name__)
         
     def _get_elapsed(self):
         return f"{time.time() - self.start_time:.1f}s"
         
     def _animate(self):
-        while not self._stop_event.is_set():
-            spinner = next(self._spinner_cycle)
-            sys.stdout.write("\r" + " " * 100)  # Clear line
-            sys.stdout.write(f"\r{spinner} [{self._get_elapsed()}] {self.message}")
-            sys.stdout.flush()
-            time.sleep(0.1)
+        # Only show animation if logging level is INFO or lower
+        if self.logger.getEffectiveLevel() <= logging.INFO:
+            while not self._stop_event.is_set():
+                spinner = next(self._spinner_cycle)
+                sys.stdout.write("\r" + " " * 100)  # Clear line
+                sys.stdout.write(f"\r{spinner} [{self._get_elapsed()}] {self.message}")
+                sys.stdout.flush()
+                time.sleep(0.1)
     
     def start(self):
         self._stop_event.clear()
@@ -61,9 +76,15 @@ class ProgressIndicator:
         message = final_message or self.message
         elapsed = self._get_elapsed()
         
-        sys.stdout.write("\r" + " " * 100)  # Clear line
-        sys.stdout.write(f"\r{symbol} [{elapsed}] {message}\n")
-        sys.stdout.flush()
+        # Clear the progress line if we were showing animation
+        if self.logger.getEffectiveLevel() <= logging.INFO:
+            sys.stdout.write("\r" + " " * 100)  # Clear line
+            sys.stdout.write(f"\r{symbol} [{elapsed}] {message}\n")
+            sys.stdout.flush()
+        
+        # Log the final status
+        log_level = logging.INFO if success else logging.WARNING
+        self.logger.log(log_level, f"Completed ({elapsed}): {message}")
         
         return elapsed
         
@@ -82,9 +103,12 @@ class RobopointGPU(Robopoint_Base):
 
     def __init__(
         self,
-        model_id: str = "wentao-yuan/robopoint-v1-vicuna-v1.5-13b",
+        model_id: str = "robopoint-v1-vicuna-v1.5-13b",
         docker_image: str = f"{DEFAULT_DOCKER_REPO}",
         auto_pull: bool = True,
+        server_port: int = 10001,
+        default_instruction: str = "In the image, identify and pinpoint several key locations. Your answer should be formatted as a list of tuples, i.e. [(x1, y1), (x2, y2), ...], where each tuple contains the x and y coordinates of a point. The coordinates should be between 0 and 1, indicating the normalized pixel locations of the points in the image.",
+        verbosity: str = "warning",
         **kwargs
     ):
         """
@@ -94,25 +118,48 @@ class RobopointGPU(Robopoint_Base):
             model_id: The model ID to use for inference.
             docker_image: The Docker image to use for inference.
             auto_pull: Whether to automatically pull the Docker image if it doesn't exist.
+            server_port: Port number for the controller server (default: 10001)
+            default_instruction: Default instruction to use when no text_instruction is provided
+            verbosity: Logging level ('debug', 'info', 'warning', 'error', 'critical')
             **kwargs: Additional arguments to pass to the base implementation.
         """
+        # Configure logging based on verbosity
+        verbosity = verbosity.lower()
+        log_levels = {
+            'debug': logging.DEBUG,
+            'info': logging.INFO,
+            'warning': logging.WARNING,
+            'error': logging.ERROR,
+            'critical': logging.CRITICAL
+        }
+        log_level = log_levels.get(verbosity, logging.WARNING)
+        logger.setLevel(log_level)  # Just set the level, format is already configured
+        
         super().__init__()
         self.model_id = model_id
         self.docker_image = docker_image
         self.auto_pull = auto_pull
+        self.controller_url = f"http://localhost:{server_port}"  # Construct URL from server_port
+        self.default_instruction = default_instruction
+        self.worker_addr = None  # Add worker address cache
         
         # Print welcome message
-        print("✨ EXLA SDK - RoboPoint Model ✨")
+        logging.info("✨ EXLA SDK - RoboPoint Model ✨")
         
         # Check if Docker is available
-        with ProgressIndicator("Checking Docker availability"):
+        with ProgressIndicator("Checking Docker availability", logger):
             self.docker_available = self._check_docker_available()
         
         # Check if the Docker image exists and pull it if needed
         if self.docker_available and auto_pull and not self._check_docker_image_exists():
-            with ProgressIndicator(f"Pulling Exla Optimized RoboPoint Docker image"):
+            with ProgressIndicator(f"Pulling Exla Optimized RoboPoint Docker image", logger):
                 self._pull_docker_image()
-        
+
+        # Run docker image and wait for server
+        self._run_docker_container()
+        if not self.wait_for_server():
+            raise RuntimeError("Failed to start RoboPoint server")
+
     def _check_docker_available(self) -> bool:
         """
         Check if Docker is available on the system.
@@ -166,14 +213,14 @@ class RobopointGPU(Robopoint_Base):
             bool: True if the image was pulled successfully, False otherwise.
         """
         try:
-            logger.info(f"Pulling Docker image {self.docker_image} from Docker Hub...")
-            result = subprocess.run(
-                ["docker", "pull", self.docker_image],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
-                text=True
-            )
+            with ProgressIndicator(f"Pulling RoboPoint Docker image {self.docker_image}", logger).start() as progress:
+                result = subprocess.run(
+                    ["docker", "pull", self.docker_image],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                    text=True
+                )
             
             if result.returncode == 0:
                 logger.info(f"Docker image {self.docker_image} pulled successfully.")
@@ -185,57 +232,6 @@ class RobopointGPU(Robopoint_Base):
             logger.warning(f"Error pulling Docker image: {e}")
             return False
     
-    def _build_docker_image(self) -> bool:
-        """
-        Build the Docker image if it doesn't exist.
-        
-        Returns:
-            bool: True if the image was built successfully, False otherwise.
-        """
-        if self._check_docker_image_exists():
-            logger.info(f"Docker image {self.docker_image} already exists.")
-            return True
-        
-        # Get the absolute path to the Dockerfile directory
-        # Assuming the Dockerfile is in docker/models/robopoint/gpu relative to the project root
-        try:
-            # Try to find the project root
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = current_dir
-            
-            # Navigate up until we find the docker directory or reach the filesystem root
-            while not os.path.exists(os.path.join(project_root, "docker")) and project_root != "/":
-                project_root = os.path.dirname(project_root)
-            
-            if not os.path.exists(os.path.join(project_root, "docker")):
-                logger.warning("Could not find docker directory in project root.")
-                return False
-            
-            dockerfile_dir = os.path.join(project_root, "docker", "models", "robopoint", "gpu")
-            
-            if not os.path.exists(dockerfile_dir):
-                logger.warning(f"Dockerfile directory not found: {dockerfile_dir}")
-                return False
-            
-            with ProgressIndicator(f"Building RoboPoint Docker image {self.docker_image}"):
-                result = subprocess.run(
-                    ["docker", "build", "-t", self.docker_image, dockerfile_dir],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    check=False,
-                    text=True
-                )
-            
-            if result.returncode == 0:
-                logger.info(f"Docker image {self.docker_image} built successfully.")
-                return True
-            else:
-                logger.warning(f"Failed to build Docker image: {result.stderr}")
-                return False
-        except Exception as e:
-            logger.warning(f"Error building Docker image: {e}")
-            return False
-    
     def install_dependencies(self) -> bool:
         """
         Install dependencies for the RoboPoint GPU implementation.
@@ -244,7 +240,6 @@ class RobopointGPU(Robopoint_Base):
         Returns:
             bool: True if dependencies were installed successfully, False otherwise.
         """
-        print("🔧 Installing dependencies for RoboPoint GPU implementation...")
         
         # Check if Docker is available
         if not self.docker_available:
@@ -253,36 +248,117 @@ class RobopointGPU(Robopoint_Base):
         
         # Check if the Docker image exists and pull it if needed
         if not self._check_docker_image_exists():
-            with ProgressIndicator(f"Pulling optimized RoboPoint model"):
+            with ProgressIndicator(f"Pulling optimized RoboPoint model", logger):
                 if self._pull_docker_image():
-                    print("✅ Dependencies installed successfully.")
                     return True
                 else:
-                    with ProgressIndicator("Building RoboPoint Docker image locally"):
-                        if self._build_docker_image():
-                            print("✅ Dependencies installed successfully (built locally).")
-                            return True
-                        else:
-                            print("❌ Failed to install dependencies.")
-                            return False
+                    print("❌ Failed to install dependencies.")
+                    return False
         else:
-            print("✅ Dependencies already installed.")
             return True
     
+    def _run_docker_container(self):
+        """
+        Run the RoboPoint server image.
+        """
+        # Check for existing container running the same image
+        try:
+            result = subprocess.run(
+                ["docker", "ps", "--filter", f"ancestor={self.docker_image}", "--format", "{{.ID}}"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            if result.stdout.strip():
+                logger.info("RoboPoint container is already running")
+                return
+        except Exception as e:
+            logger.warning(f"Error checking for existing containers: {str(e)}")
+
+        # Create the Docker command with expanded home directory path
+        huggingface_cache = os.path.expanduser("~/.cache/huggingface/hub")
+        cmd = [
+            "docker", "run", "--rm",
+            "--gpus", "all",
+            "--network", "host",
+            "-v", f"{huggingface_cache}:/models",
+            self.docker_image,
+        ]
+        
+        logger.info(f"Running Docker command: {' '.join(cmd)}")
+        
+        with ProgressIndicator("Starting RoboPoint GPU server", logger):
+            try:
+                # Start container in background
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    start_new_session=True  # Detach from parent process
+                )
+                logger.info("Docker container started in background")
+            except Exception as e:
+                logger.error(f"Failed to start Docker container: {str(e)}")
+                raise RuntimeError("Failed to start Docker container") from e
+
+    def wait_for_server(self, timeout=30, interval=2) -> bool:
+        """
+        Wait for the RoboPoint server to be running and get worker address.
+        
+        Args:
+            timeout: Maximum time to wait in seconds
+            interval: Time between retries in seconds
+            
+        Returns:
+            bool: True if server is running and responding, False otherwise
+        """
+        with ProgressIndicator("Waiting for RoboPoint server to start", logger):
+            start_time = time.time()
+            
+            while time.time() - start_time < timeout:
+                try:
+                    # Check if models are available
+                    response = requests.post(f"{self.controller_url}/list_models")
+                    if response.status_code == 200:
+                        available_models = response.json().get("models", [])
+                        if available_models and self.model_id in available_models:
+                            # Get and cache worker address
+                            response = requests.post(
+                                f"{self.controller_url}/get_worker_address",
+                                json={"model": self.model_id}
+                            )
+                            if response.status_code == 200:
+                                self.worker_addr = response.json()["address"]
+                                if self.worker_addr:
+                                    return True
+                except requests.exceptions.RequestException:
+                    pass
+                
+                time.sleep(interval)
+            
+            return False
+
     def inference(
         self,
         image_path,
         text_instruction=None,
         output=None,
+        temperature=0.2,
+        top_p=0.7,
+        max_new_tokens=512,
         **kwargs
     ) -> Dict[str, Any]:
         """
         Run inference on an image using the RoboPoint model.
         
         Args:
-            image_path: The path to the image to run inference on.
             text_instruction: The instruction to give to the model.
+            image_path: The path to the image to run inference on.
             output: The path to save the output image to. If None, no image will be saved.
+            temperature: Sampling temperature (default: 0.2)
+            top_p: Top p sampling parameter (default: 0.7)
+            max_new_tokens: Maximum number of tokens to generate (default: 512)
             **kwargs: Additional arguments to pass to the model.
             
         Returns:
@@ -290,150 +366,148 @@ class RobopointGPU(Robopoint_Base):
             
         Raises:
             RuntimeError: If Docker is not available or if there are issues with the Docker image or inference.
-        """
-        # Print welcome message
-        print("\n🚀 EXLA Optimized RoboPoint - Vision-Language Keypoint Prediction")
-        
+        """       
+ 
         # Check if Docker is available
         if not self.docker_available:
             raise RuntimeError("Docker is not available. Cannot run RoboPoint GPU implementation.")
         
-        # Check if the Docker image exists and pull or build it if needed
-        if not self._check_docker_image_exists():
-            if self.auto_pull:
-                with ProgressIndicator("Pulling RoboPoint Docker image"):
-                    if not self._pull_docker_image():
-                        with ProgressIndicator("Building RoboPoint Docker image locally"):
-                            if not self._build_docker_image():
-                                raise RuntimeError("Failed to pull or build Docker image. Cannot run RoboPoint GPU implementation.")
-            else:
-                with ProgressIndicator("Building RoboPoint Docker image locally"):
-                    if not self._build_docker_image():
-                        raise RuntimeError("Failed to build Docker image. Cannot run RoboPoint GPU implementation.")
+        # Check if we have a valid worker address
+        if not self.worker_addr:
+            raise RuntimeError("No worker address available. Server may not be running properly.")
         
-        # Create a temporary directory with full permissions for Docker output
-        with tempfile.TemporaryDirectory() as temp_dir:
-            try:
-                # Give full permissions to the temp directory
-                os.chmod(temp_dir, 0o777)
-                
-                # Handle the input image
-                input_path = image_path
-                
-                # Set the output path for Docker (always use a temp path for Docker)
-                temp_output_filename = "output.jpg"
-                temp_output_path = os.path.join(temp_dir, temp_output_filename)
-                
-                # If output is specified, ensure the output directory exists
-                if output:
-                    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
-                
-                # Set the default instruction if none is provided
-                if text_instruction is None:
-                    text_instruction = "In the image, identify and pinpoint several key locations. Your answer should be formatted as a list of tuples, i.e. [(x1, y1), (x2, y2), ...], where each tuple contains the x and y coordinates of a point. The coordinates should be between 0 and 1, indicating the normalized pixel locations of the points in the image."
-                
-                print(f"📷 Processing image: {os.path.basename(input_path)}")
-                print(f"💬 Instruction: {text_instruction}")
-                if output:
-                    print(f"📁 Output will be saved to: {output}")
+        # Set default prompt if none provided
+        if text_instruction is None:
+            text_instruction = self.default_instruction
+        else:
+            text_instruction = self.default_instruction + "\n" + text_instruction
+        
+        # Replace prints with logger
+        logger.info(f"📷 Processing image: {os.path.basename(image_path)}")
+        logger.info(f"💬 Instruction: {text_instruction}")
+        if output:
+            logger.info(f"📁 Output will be saved to: {output}")
+        else:
+            logger.info("📝 No output file will be saved (output parameter not specified)")
+        
+        try:
+            # Encode image to base64
+            with Image.open(image_path) as img:
+                # Convert to RGB if not already
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                # Save to bytes
+                buffered = io.BytesIO()
+                img.save(buffered, format="JPEG")
+                image_b64 = base64.b64encode(buffered.getvalue()).decode()
+            
+            # Get conversation template based on model name
+            if 'vicuna' in self.model_id.lower():
+                conv = conv_templates["vicuna_v1"].copy()
+            elif "llama" in self.model_id.lower():
+                conv = conv_templates["llava_llama_2"].copy()
+            elif "mistral" in self.model_id.lower():
+                conv = conv_templates["mistral_instruct"].copy()
+            elif "mpt" in self.model_id.lower():
+                conv = conv_templates["mpt"].copy()
+            else:
+                conv = conv_templates["llava_v1"].copy()
+            
+            # Add image token if not present
+            if DEFAULT_IMAGE_TOKEN not in text_instruction:
+                if 'llava' in self.model_id.lower():
+                    text_instruction = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + text_instruction
                 else:
-                    print("📝 No output file will be saved (output parameter not specified)")
+                    text_instruction = DEFAULT_IMAGE_TOKEN + '\n' + text_instruction
+            
+            # Add to conversation
+            conv.append_message(conv.roles[0], text_instruction)
+            conv.append_message(conv.roles[1], None)
+            
+            # Get prompt and stop string
+            final_prompt = conv.get_prompt()
+            stop_str = conv.sep if conv.sep_style in ["SINGLE", "MPT"] else conv.sep2
+            
+            # Prepare request payload
+            payload = {
+                "model": self.model_id,
+                "prompt": final_prompt,
+                "images": [image_b64],
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_new_tokens": max_new_tokens,
+                "stop": stop_str
+            }
+            
+            # Replace print with logger
+            logger.info(f"Sending request to worker at {self.worker_addr}")
+            
+            # Make request to worker using cached address
+            with ProgressIndicator("Generating points from image...", logger):
+                response = requests.post(
+                    f"{self.worker_addr}/worker_generate_stream",
+                    json=payload,
+                    stream=True,
+                    headers={"User-Agent": "RoboPoint Client"}
+                )
                 
-                # Run the Docker container for inference
-                try:
-                    # Create the Docker command
-                    cmd = [
-                        "docker", "run", "--rm", "--gpus", "all",
-                        "-v", f"{os.path.abspath(os.path.dirname(input_path))}:/app/input",
-                        "-v", f"{os.path.abspath(temp_dir)}:/app/output",
-                        self.docker_image,
-                        "inference",
-                        f"/app/input/{os.path.basename(input_path)}",
-                        text_instruction,
-                        f"/app/output/{temp_output_filename}"
-                    ]
+                # Handle streaming response
+                full_output = ""
+                for chunk in response.iter_lines(decode_unicode=False, delimiter=b"\0"):
+                    if chunk:
+                        data = json.loads(chunk.decode())
+                        if data["error_code"] == 0:
+                            # Print only the new text (remove the prompt)
+                            output_text = data["text"][len(final_prompt):].strip()
+                            # Use print for real-time display and logger for permanent record
+                            # print(output_text, end="\r")
+                            full_output = output_text  # Save the last output
+                        else:
+                            error_msg = f"Error: {data['text']} (code: {data['error_code']})"
+                            logger.error(error_msg)
+                            raise RuntimeError(error_msg)
+            
+            # Parse coordinates from the output
+            pattern = r"\(([0-9.]+),\s*([0-9.]+)\)"
+            matches = re.findall(pattern, full_output)
+            keypoints = [(float(x), float(y)) for x, y in matches]
+            
+            # If output path provided, create visualization
+            if output and keypoints:
+                with Image.open(image_path) as img:
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
                     
-                    logger.info(f"Running Docker command: {' '.join(cmd)}")
+                    draw = ImageDraw.Draw(img)
+                    width, height = img.size
                     
-                    with ProgressIndicator("Running RoboPoint inference on GPU"):
-                        result = subprocess.run(
-                            cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            check=False,
-                            text=True
+                    # Draw each coordinate as a dot
+                    for x, y in keypoints:
+                        px = int(x * width)
+                        py = int(y * height)
+                        radius = 5  # Default dot size
+                        draw.ellipse(
+                            [(px - radius, py - radius), (px + radius, py + radius)],
+                            fill="red"  # Default color
                         )
                     
-                    if result.returncode != 0:
-                        raise RuntimeError(f"Docker inference failed: {result.stderr}")
-                    
-                    # Check if the output file exists in the temp directory
-                    temp_output_file = os.path.join(temp_dir, temp_output_filename)
-                    if not os.path.exists(temp_output_file):
-                        print(f"⚠️ Output file not found: {temp_output_file}")
-                        # Check if there's a text file with the keypoints
-                        text_output_file = f"{temp_output_file}.txt"
-                        if os.path.exists(text_output_file):
-                            print(f"📄 Found text output file: {text_output_file}")
-                            with open(text_output_file, "r") as f:
-                                keypoints_line = f.read().strip()
-                                if keypoints_line.startswith("Keypoints:"):
-                                    keypoints_str = keypoints_line.replace("Keypoints:", "").strip()
-                                    try:
-                                        import ast
-                                        keypoints = ast.literal_eval(keypoints_str)
-                                        print(f"✅ Successfully extracted {len(keypoints)} keypoints from text file")
-                                        return {
-                                            "status": "success",
-                                            "keypoints": keypoints,
-                                            "raw_response": "Generated from text file"
-                                        }
-                                    except Exception as e:
-                                        print(f"⚠️ Failed to parse keypoints from text file: {e}")
-                                        raise RuntimeError(f"Failed to parse keypoints from text file: {e}")
-                        else:
-                            raise RuntimeError(f"Output file not found and no text output file available")
-                    
-                    # If output path was provided, copy the file from temp directory
-                    if output:
-                        with ProgressIndicator(f"Saving output visualization to {output}"):
-                            shutil.copy2(temp_output_file, output)
-                    
-                    # Parse the output to extract keypoints
-                    keypoints = []
-                    raw_response = ""
-                    
-                    for line in result.stdout.splitlines():
-                        if line.startswith("Keypoints:"):
-                            keypoints_str = line.replace("Keypoints:", "").strip()
-                            try:
-                                # Parse the keypoints string into a list of tuples
-                                # The format is expected to be [(x1, y1), (x2, y2), ...]
-                                import ast
-                                keypoints = ast.literal_eval(keypoints_str)
-                            except Exception as e:
-                                print(f"⚠️ Failed to parse keypoints: {e}")
-                                raise RuntimeError(f"Failed to parse keypoints: {e}")
-                        elif line.startswith("Raw response:"):
-                            raw_response = line.replace("Raw response:", "").strip()
-                    
-                    print(f"✨ RoboPoint Inference Summary:")
-                    print(f"   • Model: {self.model_id}")
-                    print(f"   • Device: GPU (Docker)")
-                    print(f"   • Keypoints detected: {len(keypoints)}")
-                    if output:
-                        print(f"   • Output visualization: {output}")
-                    else:
-                        print(f"   • No output image saved")
-                    
-                    return {
-                        "status": "success",
-                        "keypoints": keypoints,
-                        "raw_response": raw_response
-                    }
-                    
-                except Exception as e:
-                    raise RuntimeError(f"Error running Docker inference: {e}")
-            except Exception as e:
-                raise RuntimeError(f"Error setting up temporary directory: {e}")
+                    img.save(output)
+
+            logger.info("✨ RoboPoint Inference Summary:")
+            logger.info(f"   • Model: {self.model_id}")
+            logger.info(f"   • Device: GPU (Docker)")
+            logger.info(f"   • Keypoints detected: {len(keypoints)}")
+            if output:
+                logger.info(f"   • Output visualization: {output}")
+            else:
+                logger.info(f"   • No output image saved")
+            
+            return {
+                "status": "success",
+                "keypoints": keypoints,
+                "raw_response": full_output
+            }
+            
+        except Exception as e:
+            raise RuntimeError(f"Error during inference: {str(e)}")
         
