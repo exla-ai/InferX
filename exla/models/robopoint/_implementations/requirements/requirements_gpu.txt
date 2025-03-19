@@ -10,3 +10,4 @@ protobuf>=3.20.0
 einops>=0.6.1
 regex>=2022.10.31
 peft>=0.4.0
+requests>=2.31.0

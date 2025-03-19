@@ -1,13 +1,15 @@
 from exla.utils.device_detect import detect_device
 
 
-def robopoint(auto_pull=True):
+def robopoint(auto_pull=True, verbosity="warning", server_port=10001):
     """
     Factory function that returns the appropriate RoboPoint model
     based on the detected hardware.
     
     Args:
         auto_pull: Whether to automatically pull the Docker image if using GPU implementation.
+        verbosity: Logging level ('debug', 'info', 'warning', 'error', 'critical')
+        server_port: Port number for the docker server (default: 10001)
         
     Returns:
         An instance of the appropriate RoboPoint implementation.
@@ -21,7 +23,7 @@ def robopoint(auto_pull=True):
         return RobopointJetson()
     elif device_type == "gpu":
         from .robopoint_gpu import RobopointGPU
-        model = RobopointGPU(auto_pull=auto_pull)
+        model = RobopointGPU(auto_pull=auto_pull, verbosity=verbosity, server_port=server_port)
         # Install dependencies (pull Docker image) if auto_pull is True
         if auto_pull:
             model.install_dependencies()
