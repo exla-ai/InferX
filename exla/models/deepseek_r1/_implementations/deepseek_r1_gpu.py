@@ -173,13 +173,15 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
     def __init__(self,
                  model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
                  server_port=8000,
-                 webui_port=3000):
+                 webui_port=3000,
+                 tensor_parallel_size=1):
         self.model_name = model_name
         self.server_port = server_port
         self.webui_port = webui_port
         self.docker_manager = DockerManager()
         self.running = True
         self.progress = OptimizationProgress()
+        self.tensor_parallel_size = tensor_parallel_size
 
         # Register signal and exit handlers for graceful cleanup
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -200,9 +202,24 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         """Start Exla server in a Docker container using the DockerManager interface."""
         image = "vllm/vllm-openai:latest"
         
-        self.progress.start_step("Initializing optimization engine...")
+        self.progress.start_step("Downloading model...")
+        try:
+            from huggingface_hub import snapshot_download
+            model_path = snapshot_download(
+                repo_id="unsloth/DeepSeek-R1-Distill-Llama-70B-GGUF",
+                allow_patterns=["*Q8_0*"],
+                local_files_only=False
+            )
+            self.model_name = str(model_path)  # Update model path to local directory
+            print(f"Model downloaded to: {self.model_name}")
+            self.progress.complete_step("Model downloaded successfully")
+        except Exception as e:
+            self.progress.complete_step(f"Failed to download model: {str(e)}", success=False)
+            raise RuntimeError("Model download failed") from e
+        
+        self.progress.start_step("Initializing vLLM engine...")
         self.docker_manager.pull_image(image)
-        self.progress.complete_step("Optimization engine initialized")
+        self.progress.complete_step("vLLM engine initialized")
         
         self.progress.start_step("Analyzing hardware capabilities...")
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
@@ -212,10 +229,12 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         cmd = [
             "--model", self.model_name,
             "--enable-reasoning",
+            "--load-format", "gguf",
             "--reasoning-parser", "deepseek_r1",
             "--uvicorn-log-level", "debug",
             "--return-tokens-as-token-ids",
-            "--served-model-name", "DeepSeek-R1-Exla-Optimized"
+            "--served-model-name", "DeepSeek-R1-Exla-Optimized",
+            "--tensor-parallel-size", str(self.tensor_parallel_size)
         ]
         self.progress.complete_step("Model architecture optimized")
 

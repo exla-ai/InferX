@@ -10,6 +10,8 @@ if ! command -v uv &> /dev/null; then
 fi
 uv venv --python 3.10
 
+source .venv/bin/activate
+
 # Update pip and install packages
 echo "Installing required packages..."
 
