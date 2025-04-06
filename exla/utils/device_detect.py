@@ -2,6 +2,7 @@ import platform
 import subprocess
 import os
 import shutil
+import sys
 
 def is_jetson_device():
     """
@@ -93,12 +94,33 @@ def get_gpu_info():
             'cuda_version': None
         }
 
+def has_mps_support():
+    """
+    Check if the device has MPS (Metal Performance Shaders) support for Apple Silicon.
+    """
+    # Check if running on macOS
+    if platform.system() != 'Darwin':
+        return False
+    
+    # Check if running on Apple Silicon
+    is_arm = platform.machine() == 'arm64'
+    
+    # Try to import torch and check for MPS availability
+    try:
+        import torch
+        has_mps = torch.backends.mps.is_available()
+        return is_arm and has_mps
+    except (ImportError, AttributeError):
+        # If torch is not installed or doesn't have MPS attribute,
+        # just check if we're on Apple Silicon
+        return is_arm
+
 def detect_device():
     """
     Automatically detects the hardware device and returns appropriate configuration.
     Returns:
         dict: Device configuration including:
-            - type: str (cpu, orin_nano, agx_orin, gpu, etc.)
+            - type: str (cpu, mps, orin_nano, agx_orin, gpu, etc.)
             - capabilities: dict of device capabilities
             - requirements: list of required packages
     """
@@ -107,12 +129,20 @@ def detect_device():
         'capabilities': {
             'gpu_available': False,
             'cuda_available': False,
+            'mps_available': False,
             'tensorrt_supported': False
         },
         'requirements': ['transformers']  # Base requirements without torch
     }
 
-    if has_nvidia_gpu():
+    # Check for Apple Silicon with MPS support
+    if has_mps_support():
+        device_info['type'] = 'mps'
+        device_info['capabilities']['gpu_available'] = True
+        device_info['capabilities']['mps_available'] = True
+        device_info['requirements'].append('torch>=2.0.0')
+    # Check for NVIDIA GPU
+    elif has_nvidia_gpu():
         device_info['capabilities']['gpu_available'] = True
         gpu_info = get_gpu_info()
         
