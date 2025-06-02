@@ -8,6 +8,12 @@ InferX is model wrapper tool we've been using internally to seamlessly test and 
 
 This was mainly built to run devices across A100/H100s and also Jetsons. 
 
+**This is still in beta and things might not be workng as expected!**
+
+## Key notes:
+1. There are different implementations of models.
+2. A keynote with InferX is we make sure that only libraries that you need to install per library 
+
 
 ## 🎯 Supported Models
 
