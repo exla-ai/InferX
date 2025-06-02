@@ -77,8 +77,8 @@ push_image() {
     docker tag "$IMAGE_ID_OR_NAME" "$PUBLIC_ECR_URI"
     
     # Export AWS credentials for AWS CLI to use
-    export AWS_ACCESS_KEY_ID="AKIAYWBJYKWSBG5VEIJP"
-    export AWS_SECRET_ACCESS_KEY="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"
+    export AWS_ACCESS_KEY_ID=""
+    export AWS_SECRET_ACCESS_KEY=""
     export AWS_DEFAULT_REGION="us-east-1"
     
     # Login to public ECR
@@ -95,7 +95,7 @@ push_image() {
         echo -e "  - Public URI: $PUBLIC_ECR_URI"
         
         echo -e "\n${BLUE}To use in your code:${NC}"
-        echo -e "from exla.models.robopoint import robopoint"
+        echo -e "from inferx.models.robopoint import robopoint"
         echo -e "model = robopoint(docker_image=\"$PUBLIC_ECR_URI\")"
     else
         echo -e "${RED}Failed to push image to public ECR${NC}"

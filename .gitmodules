@@ -1,5 +1,5 @@
-[submodule "exla-sdk-examples"]
-    path = exla-sdk-examples
-    url = https://github.com/exla-ai/exla-sdk-examples
+[submodule "inferx-examples"]
+    path = inferx-examples
+    url = https://github.com/exla-ai/inferx-examples
     ignore = all
 

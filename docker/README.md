@@ -1,6 +1,6 @@
-# Exla SDK Docker Image Management
+# InferX Docker Image Management
 
-This directory contains tools for managing Docker images used by the Exla SDK.
+This directory contains tools for managing Docker images used by InferX.
 
 ## Simple ECR Push Script
 
@@ -123,10 +123,10 @@ After pushing an image, the script will output the public URI for the image.
 docker pull public.ecr.aws/h1f5g0k2/exla:repository-name-tag
 ```
 
-#### Use in Exla SDK code
+#### Use in InferX SDK code
 
 ```python
-from exla.models.robopoint import robopoint
+from inferx.models.robopoint import robopoint
 model = robopoint(docker_image="public.ecr.aws/h1f5g0k2/exla:repository-name-tag")
 ```
 

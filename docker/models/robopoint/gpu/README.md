@@ -42,9 +42,9 @@ You can run the container directly:
 docker run --gpus all -v /path/to/input/dir:/app/data/input -v /path/to/output/dir:/app/data/output exla/robopoint-gpu:latest inference /app/data/input/image.jpg "Find keypoints in the image" /app/data/output/result.png
 ```
 
-### Integration with exla Package
+### Integration with inferx Package
 
-The RoboPoint model is integrated with the exla package. After building and pushing the image, you can use it through the Python API:
+The RoboPoint model is integrated with the inferx package. After building and pushing the image, you can use it through the Python API:
 
 ```python
 from examples.models.robopoint.robopoint import robopoint
