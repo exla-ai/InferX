@@ -23,7 +23,7 @@ from .helpers import DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END
 
 
 # Default Docker Hub repository for the RoboPoint image
-DEFAULT_DOCKER_REPO = "public.ecr.aws/h1f5g0k2/inferx:robopoint-v2-gpu-latest"
+DEFAULT_DOCKER_REPO = "public.ecr.aws/h1f5g0k2/exla:robopoint-v2-gpu-latest"
 
 # Create logger but don't configure it yet
 logger = logging.getLogger(__name__)

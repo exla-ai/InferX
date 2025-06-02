@@ -5,7 +5,12 @@ description = "InferX - Hardware-optimized inference toolkit for easy ML model t
 authors = [
     {name = "Viraat Das", email = "viraat@exla.ai"}
 ]
-dependencies = []
+dependencies = [
+    "setuptools>=68.0",
+    "requests>=2.32.0",
+    "pillow>=11.0.0",
+    "numpy>=2.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]
