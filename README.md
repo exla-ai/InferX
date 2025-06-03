@@ -8,16 +8,11 @@ InferX is model wrapper tool we've been using internally to easily test and benc
 
 This was mainly built to test models on A100/H100s and also Jetsons. Though this can be extended to support any device.
 
-**This is still in beta and things might not be workng as expected!**
-
-
 ## Key notes:
 1. There are different implementations of models.
 2. A keynote with InferX is we make sure that only libraries that you need to install per library 
 
-## Get Started
-
-### Quick Setup
+## 🚀 Quick Start
 
 1. **Add your user to the Docker group**
    ```bash
@@ -58,23 +53,19 @@ This was mainly built to test models on A100/H100s and also Jetsons. Though this
 
 | Model | Jetson AGX Orin | Jetson Orin Nano | NVIDIA H100 | NVIDIA A100 | CPU (x86-64) | CPU (ARM64) |
 |-------|----------------|------------------|--------------|-------------|---------------|-------------|
-| **CLIP** | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | 🟡 Compatible* |
-| **SAM2** | ✅ Tested | ✅ Tested | 🟡 Compatible* | 🟡 Compatible* | ✅ Tested | 🟡 Compatible* |
-| **RoboPoint** | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | 🟡 Compatible* |
-| **Whisper** | ✅ Tested | ✅ Tested | 🟡 Compatible* | 🟡 Compatible* | ✅ Tested | 🟡 Compatible* |
-| **DeepSeek R1** | 🟡 Compatible* | 🟡 Compatible* | ✅ Tested | ✅ Tested | ✅ Tested | 🟡 Compatible* |
-| **ResNet34** | ✅ Tested | ✅ Tested | 🟡 Compatible* | 🟡 Compatible* | ✅ Tested | 🟡 Compatible* |
-| **MobileNet** | ✅ Tested | ✅ Tested | 🟡 Compatible* | 🟡 Compatible* | ✅ Tested | 🟡 Compatible* |
-| **InternVL2.5** | 🟡 Compatible* | 🟡 Compatible* | 🟡 Compatible* | ✅ Tested | 🟡 Compatible*| 🟡 Compatible* |
+| **CLIP** | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | 🟡 Compatible |
+| **SAM2** | ✅ Tested | ✅ Tested | 🟡 Compatible | 🟡 Compatible* | 🟡 Compatible | 🟡 Compatible |
+| **RoboPoint** | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | 🟡 Compatible |
+| **Whisper** | ✅ Tested | ✅ Tested | 🟡 Compatible | 🟡 Compatible | ✅ Tested | 🟡 Compatible |
+| **DeepSeek R1** | 🟡 Compatible | 🟡 Compatible | ✅ Tested | ✅ Tested | ✅ Tested | 🟡 Compatible |
+| **ResNet34** | ✅ Tested | ✅ Tested | 🟡 Compatible | 🟡 Compatible* | ✅ Tested | 🟡 Compatible |
+| **MobileNet** | ✅ Tested | ✅ Tested | 🟡 Compatible | 🟡 Compatible* | ✅ Tested | 🟡 Compatible |
+| **InternVL2.5** | 🟡 Compatible | 🟡 Compatible | 🟡 Compatible | ✅ Tested | 🟡 Compatible| 🟡 Compatible |
 
 ### **Legend:**
 - ✅ **Tested**: Verified working with full optimizations
 - 🟡 **Compatible***: Should work based on hardware specs, not extensively tested  
 - ❌ **Not Supported**: Hardware limitations
-
-## Benchmarking
- 
-**todo**
 
 ## How It Works
 
@@ -84,32 +75,6 @@ Inferx uses "extreme lazy loading" to only download packages and dependencies yo
 2. **On-demand Dependencies**: Dependencies are only installed when needed, reducing installation footprint.
 3. **Automatic Setup**: Environment variables and configurations are set up automatically.
 4. **Graceful Fallbacks**: If GPU acceleration isn't available, the library *should* (might not be the case for all models currently) falls back to CPU.
-
-## 🚀 Quick Start
-
-### Installation
-
-For detailed setup instructions and examples, visit our comprehensive documentation:
-
-**👉 [Complete Setup Guide at docs.exla.ai](https://docs.exla.ai/quickstart)**
-
-### Basic Usage
-
-```python
-from inferx.models.clip import clip
-import json
-
-# Initialize the model (automatically detects your hardware)
-model = clip()
-
-# Run inference
-results = model.inference(
-    image_paths=["path/to/image1.jpg", "path/to/image2.jpg"],
-    text_queries=["a photo of a dog", "a photo of a cat", "a photo of a bird"]
-)
-
-print(json.dumps(results, indent=2))
-```
 
 ## 🏗️ Project Structure
 

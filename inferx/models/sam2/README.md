@@ -14,7 +14,7 @@ This module provides an optimized implementation of the Segment Anything Model 2
 
 The SAM2 model is included in the InferX. Dependencies will be automatically installed when you first use the model.
 
-## Usage
+## Usage (Parts of SAM 2 are broken and need to be fixed like the custom prompts)
 
 ### Basic Usage
 
