@@ -7,7 +7,7 @@ This module provides an optimized implementation of the Segment Anything Model 2
 - **TensorRT Optimization**: Accelerated inference using NVIDIA TensorRT
 - **Camera Stream Support**: Process live video from cameras or RTSP streams
 - **Custom Prompts**: Specify points or boxes to guide segmentation
-- **Direct Model Access**: Get direct access to the underlying model for advanced usage
+
 - **Server Mode**: Option to use a remote server for inference
 
 ## Installation

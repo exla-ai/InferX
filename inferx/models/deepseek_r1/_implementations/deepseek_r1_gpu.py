@@ -149,26 +149,6 @@ class DockerManager:
 class Deepseek_R1_GPU(Deepseek_R1_Base):
     """
     Manages the lifecycle of the Deepseek language server and the Open WebUI chat container.
-    
-    Model Statistics:
-    - Original DeepSeek-R1: 671B parameters
-        - Architecture: Transformer-based LLM
-        - Training data: 2T tokens
-        - Context window: 4096 tokens
-        
-    - DeepSeek-R1-Distill-1.5B (Default):
-        - Parameters: 1.5B (0.22% of original size)
-        - Architecture: Distilled Transformer
-        - Context window: 4096 tokens
-        - Optimization techniques:
-            - Knowledge Distillation from R1-671B
-            - FP16 mixed precision
-            - Quantization: 16-bit base, optional 8-bit and 4-bit
-            - Tensor parallelism for multi-GPU deployment
-            - KV cache optimization
-            - Attention optimization with Flash Attention 2.0
-            - Throughput: ~150 tokens/sec on NVIDIA A100
-            - Memory footprint: ~3GB in FP16
     """
     def __init__(self,
                  model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
@@ -208,16 +188,16 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
         self.progress.complete_step("Hardware analysis complete")
         
-        self.progress.start_step("Configuring model architecture...")
+        self.progress.start_step("Configuring model...")
         cmd = [
             "--model", self.model_name,
             "--enable-reasoning",
             "--reasoning-parser", "deepseek_r1",
             "--uvicorn-log-level", "debug",
             "--return-tokens-as-token-ids",
-            "--served-model-name", "DeepSeek-R1-InferX-Optimized"
+            "--served-model-name", "DeepSeek-R1-InferX"
         ]
-        self.progress.complete_step("Model architecture optimized")
+        self.progress.complete_step("Model configured")
 
         self.progress.start_step("Configuring memory mapping...")
         volumes = {
@@ -242,13 +222,6 @@ class Deepseek_R1_GPU(Deepseek_R1_Base):
         )
         self._container_id = container.id
         self.progress.complete_step("Inference engine ready")
-        
-        print("\n🚀 Model Optimization Summary:")
-        print("   • Original model size: 671B parameters (~1.3TB in FP16)")
-        print("   • Optimized model size: ~135GB")
-        print("   • Hardware-aware quantization active")
-        print("   • Advanced attention mechanisms enabled")
-        print("   • Dynamic KV cache optimization\n")
 
     def start_webui(self):
         """Start the Open WebUI chat interface in a Docker container using the DockerManager interface."""
