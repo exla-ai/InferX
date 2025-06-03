@@ -48,6 +48,9 @@ This was mainly built to test models on A100/H100s and also Jetsons. Though this
 
 🎉 **That's it!** InferX will automatically detect your hardware and run an optimized instance of the model. 
 
+## Examples
+
+Every supported model has a corresponding example here: https://github.com/exla-ai/inferx-examples
 
 ## 🎯 Model & Platform Compatibility Matrix
 
@@ -58,8 +61,8 @@ This was mainly built to test models on A100/H100s and also Jetsons. Though this
 | **RoboPoint** | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | ✅ Tested | 🟡 Compatible |
 | **Whisper** | ✅ Tested | ✅ Tested | 🟡 Compatible | 🟡 Compatible | ✅ Tested | 🟡 Compatible |
 | **DeepSeek R1** | 🟡 Compatible | 🟡 Compatible | ✅ Tested | ✅ Tested | ✅ Tested | 🟡 Compatible |
-| **ResNet34** | ✅ Tested | ✅ Tested | 🟡 Compatible | 🟡 Compatible* | ✅ Tested | 🟡 Compatible |
-| **MobileNet** | ✅ Tested | ✅ Tested | 🟡 Compatible | 🟡 Compatible* | ✅ Tested | 🟡 Compatible |
+| **ResNet34** | ✅ Tested | ✅ Tested | 🟡 Compatible | 🟡 Compatible | ✅ Tested | 🟡 Compatible |
+| **MobileNet** | ✅ Tested | ✅ Tested | 🟡 Compatible | 🟡 Compatible| ✅ Tested | 🟡 Compatible |
 | **InternVL2.5** | 🟡 Compatible | 🟡 Compatible | 🟡 Compatible | ✅ Tested | 🟡 Compatible| 🟡 Compatible |
 
 ### **Legend:**
@@ -106,7 +109,7 @@ inferx/
 
 ## 🤝 Contributing
 
-We welcome contributions! Please add more models
+We welcome contributions! 
 
 ## 📝 License
 
