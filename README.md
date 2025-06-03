@@ -8,6 +8,8 @@ InferX is model wrapper tool we've been using internally to easily test and benc
 
 This was mainly built to test models on A100/H100s and also Jetsons. Though this can be extended to support any device.
 
+📚 **[View Full Documentation](https://docs.exla.ai/)**
+
 ## Key notes:
 1. There are different implementations of models.
 2. A keynote with InferX is we make sure that only libraries that you need to install per library 
